@@ -160,6 +160,7 @@
         // Input
         const keys = {};
         let joystickVector = { x: 0, y: 0 };
+        let joystickTimer = 0; // Debounce for joystick menu navigation
 
         // Player Object
         const player = {
@@ -358,6 +359,7 @@
 
         function update(dt) {
             if (currentState === STATE_WORLD) updateWorld(dt);
+            else if (currentState === STATE_BATTLE) updateBattleJoystick(dt);
         }
 
         function draw() {
@@ -372,6 +374,22 @@
         }
 
         // --- World Update ---
+        function updateBattleJoystick(dt) {
+            joystickTimer -= dt;
+            if (joystickTimer > 0) return;
+
+            // Threshold for joystick direction
+            if (joystickVector.y < -0.5) {
+                // Up
+                handleBattleInput('ArrowUp');
+                joystickTimer = 0.3; // 300ms cooldown
+            } else if (joystickVector.y > 0.5) {
+                // Down
+                handleBattleInput('ArrowDown');
+                joystickTimer = 0.3;
+            }
+        }
+
         function updateWorld(dt) {
             // Calculate movement vector from Keys + Joystick
             let dx = joystickVector.x;
