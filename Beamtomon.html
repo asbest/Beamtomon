@@ -226,6 +226,26 @@
         const COLOR_MENU_BG = '#303030';
         const COLOR_MENU_BORDER = '#ffffff';
 
+        // Factions (Types)
+        const FACT_OFFICER = 'OFFICER';     // Authority
+        const FACT_POLITICIAN = 'POLITICIAN'; // Power
+        const FACT_CITIZEN = 'CITIZEN';     // Public
+        const FACT_NEUTRAL = 'NEUTRAL'; 
+
+        // Type Advantage Chart
+        // OFFICER > CITIZEN > POLITICIAN > OFFICER
+        function getTypeEffectiveness(attackerType, defenderType) {
+            if (attackerType === FACT_OFFICER && defenderType === FACT_CITIZEN) return 1.5;
+            if (attackerType === FACT_CITIZEN && defenderType === FACT_POLITICIAN) return 1.5;
+            if (attackerType === FACT_POLITICIAN && defenderType === FACT_OFFICER) return 1.5;
+            
+            if (attackerType === FACT_OFFICER && defenderType === FACT_POLITICIAN) return 0.5;
+            if (attackerType === FACT_CITIZEN && defenderType === FACT_OFFICER) return 0.5;
+            if (attackerType === FACT_POLITICIAN && defenderType === FACT_CITIZEN) return 0.5;
+            
+            return 1.0;
+        }
+
         // Game State
         const STATE_WORLD = 'WORLD';
         const STATE_BATTLE = 'BATTLE';
@@ -242,7 +262,6 @@
             return x - Math.floor(x);
         }
 
-        // Input
         const keys = {};
         let joystickVector = { x: 0, y: 0 };
         let joystickTimer = 0;
@@ -258,6 +277,7 @@
             speed: 200,
             color: '#3498db',
             type: "Beamter",
+            dept: FACT_OFFICER, // Player Faction
             level: 1,
             hp: 20,
             maxHp: 20,
@@ -265,61 +285,62 @@
             nextLevelXp: 50,
             score: 0,
             consultants: 0,
-            animFrame: 0,
-            status: null // { type: 'NAUSEA' | 'STUN', duration: 2 }
+            inventory: { donuts: 1 },
+            status: null
         };
 
         let coffeeMachineLoc = { x: 0, y: 0 };
         let exitDoorLoc = { x: 0, y: 0 };
 
-        // Data
-        const TITLES = ["Anwärter", "Inspektor", "Oberinspektor", "Amtmann", "Amtsrat"];
+        // ENGLISH TITLES
+        const TITLES = ["Intern", "Junior Associate", "Senior Associate", "Manager", "Director"];
         
-        // MOVES WITH STATUS EFFECTS
+        // Attack Types
         const PLAYER_ATTACKS = [
-            { name: "Permission Denied", damage: 4, effect: "STUN", chance: 0.4 }, // Chance to block turn
-            { name: "Pass the Buck", damage: 6 },
-            { name: "Coffee Break", damage: 0, heal: true },
-            { name: "Form A38", damage: 8, effect: "CONFUSE", chance: 0.3 } // Chance for enemy to hurt self
+            { name: "Permission Denied", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }, 
+            { name: "Pass the Buck", damage: 6, type: FACT_POLITICIAN }, // Deflection is political
+            { name: "Item", isItem: true },
+            { name: "Form A38", damage: 8, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.3 } 
         ];
 
         const ENEMY_MOVES = {
             "Consultant": [
-                { name: "Synergy Strike", damage: 5 },
-                { name: "Mass Layoff", damage: 9 },
-                { name: "Buzzword Blast", damage: 3, effect: "CONFUSE", chance: 0.5 },
-                { name: "Circle Back", damage: 4 }
+                { name: "Synergy Strike", damage: 5, type: FACT_POLITICIAN },
+                { name: "Mass Layoff", damage: 9, type: FACT_POLITICIAN },
+                { name: "Buzzword Blast", damage: 3, type: FACT_POLITICIAN, effect: "CONFUSE", chance: 0.5 },
+                { name: "Circle Back", damage: 4, type: FACT_OFFICER }
             ],
             "Politician": [
-                { name: "Empty Promise", damage: 2 },
-                { name: "Tax Hike", damage: 7 },
-                { name: "Filibuster", damage: 4, effect: "STUN", chance: 0.5 },
-                { name: "Scandal", damage: 8 }
+                { name: "Empty Promise", damage: 2, type: FACT_POLITICIAN },
+                { name: "Tax Hike", damage: 7, type: FACT_OFFICER }, // Taxes use officers
+                { name: "Filibuster", damage: 4, type: FACT_POLITICIAN, effect: "STUN", chance: 0.5 },
+                { name: "Scandal", damage: 8, type: FACT_POLITICIAN }
             ],
             "Citizen": [
-                { name: "Complaint", damage: 3 },
-                { name: "Angry Email", damage: 4 },
-                { name: "Phone Call", damage: 2 },
-                { name: "Form Request", damage: 1 }
+                { name: "Complaint", damage: 3, type: FACT_CITIZEN },
+                { name: "Angry Email", damage: 4, type: FACT_CITIZEN },
+                { name: "Phone Call", damage: 2, type: FACT_CITIZEN },
+                { name: "Form Request", damage: 1, type: FACT_CITIZEN }
             ],
             "Colleague": [
-                { name: "Reply All", damage: 5 },
-                { name: "Gossip", damage: 3 },
-                { name: "Microwave Fish", damage: 6, effect: "NAUSEA", chance: 1.0 }, // 100% Nausea
-                { name: "Meeting Invite", damage: 4, effect: "STUN", chance: 0.3 }
+                { name: "Reply All", damage: 5, type: FACT_OFFICER },
+                { name: "Gossip", damage: 3, type: FACT_NEUTRAL },
+                { name: "Microwave Fish", damage: 6, type: FACT_NEUTRAL, effect: "NAUSEA", chance: 1.0 }, 
+                { name: "Meeting Invite", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }
             ]
         };
         
         const ENEMY_TYPES = [
-            { name: "Consultant", color: "#f1c40f", shirt: "#f1c40f", pants: "#2c3e50", hp: 15, xp: 20 },
-            { name: "Politician", color: "#9b59b6", shirt: "#8e44ad", pants: "#2c3e50", hp: 25, xp: 30 },
-            { name: "Citizen", color: "#2ecc71", shirt: "#27ae60", pants: "#ecf0f1", hp: 10, xp: 10 },
-            { name: "Colleague", color: "#95a5a6", shirt: "#7f8c8d", pants: "#34495e", hp: 20, xp: 25 }
+            { name: "Consultant", dept: FACT_POLITICIAN, color: "#f1c40f", shirt: "#f1c40f", pants: "#2c3e50", hp: 15, xp: 20 },
+            { name: "Politician", dept: FACT_POLITICIAN, color: "#9b59b6", shirt: "#8e44ad", pants: "#2c3e50", hp: 25, xp: 30 },
+            { name: "Citizen", dept: FACT_CITIZEN, color: "#2ecc71", shirt: "#27ae60", pants: "#ecf0f1", hp: 10, xp: 10 },
+            { name: "Colleague", dept: FACT_OFFICER, color: "#95a5a6", shirt: "#7f8c8d", pants: "#34495e", hp: 20, xp: 25 }
         ];
 
         const worldMap = [];
         const objectMap = [];
         const enemies = [];
+        const lootedObjects = []; 
 
         // --- Drawing Helpers ---
 
@@ -346,7 +367,7 @@
             const w = 30 * scale;
             const h = 30 * scale;
             const cx = x + w / 2;
-            const cy = y + h / 2;
+            const drawY = y + Math.sin(Date.now() / 200) * (2 * scale);
 
             let skinColor = '#ffdbac';
             let shirtColor = '#3498db';
@@ -365,19 +386,15 @@
                 shirtColor = '#95a5a6'; pantsColor = '#34495e';
             }
 
-            const bob = Math.sin(Date.now() / 200) * (2 * scale);
-            const drawY = y + bob;
-
             ctx.save();
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath();
             ctx.ellipse(cx, y + h - 2*scale, w/2, h/6, 0, 0, Math.PI*2);
             ctx.fill();
 
-            // Status Tint
             if (status) {
-                if (status.type === 'NAUSEA') ctx.filter = 'hue-rotate(90deg)'; // Green tint
-                if (status.type === 'STUN') ctx.filter = 'brightness(0.5)'; // Dark tint
+                if (status.type === 'NAUSEA') ctx.filter = 'hue-rotate(90deg)';
+                if (status.type === 'STUN') ctx.filter = 'brightness(0.5)';
             }
 
             ctx.fillStyle = shirtColor;
@@ -426,15 +443,6 @@
                     ctx.lineTo(cx - w*0.05, drawY + h*0.6);
                     ctx.fill();
                 }
-                
-                if (type === "Beamter" || type === "Consultant") {
-                    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-                    ctx.lineWidth = 1 * scale;
-                    ctx.beginPath();
-                    ctx.moveTo(cx, drawY + h*0.4);
-                    ctx.lineTo(cx, drawY + h*0.8);
-                    ctx.stroke();
-                }
             }
             
             ctx.fillStyle = shirtColor;
@@ -443,23 +451,21 @@
             ctx.ellipse(x + w*0.9, drawY + h*0.5, w*0.1, h*0.2, 0, 0, Math.PI*2);
             ctx.fill();
             
-            // Status Icon/Text
-            ctx.filter = 'none'; // Reset filter
+            ctx.filter = 'none';
             if (status) {
-                ctx.fillStyle = 'white';
                 ctx.font = `bold ${10*scale}px Arial`;
                 ctx.textAlign = 'center';
                 let text = "";
-                if (status.type === 'NAUSEA') { ctx.fillStyle = '#2ecc71'; text = "🤢"; }
-                if (status.type === 'STUN') { ctx.fillStyle = '#f1c40f'; text = "😵"; }
-                if (status.type === 'CONFUSE') { ctx.fillStyle = '#9b59b6'; text = "❓"; }
+                if (status.type === 'NAUSEA') text = "🤢";
+                if (status.type === 'STUN') text = "😵";
+                if (status.type === 'CONFUSE') text = "❓";
                 ctx.fillText(text, cx, drawY - h*0.2);
             }
 
             ctx.restore();
         }
 
-        function drawObject(ctx, x, y, type) {
+        function drawObject(ctx, x, y, type, looted) {
             ctx.fillStyle = 'rgba(0,0,0,0.1)';
             ctx.fillRect(x + 2, y + TILE_SIZE - 5, TILE_SIZE - 4, 4);
 
@@ -467,8 +473,10 @@
                 ctx.fillStyle = '#5d4037'; ctx.fillRect(x + 5, y + 15, 5, 20); ctx.fillRect(x + 30, y + 15, 5, 20);
                 ctx.fillStyle = '#8d6e63'; ctx.fillRect(x + 2, y + 10, 36, 12);
                 ctx.fillStyle = '#795548'; ctx.fillRect(x + 2, y + 22, 36, 3);
-                ctx.fillStyle = 'white'; ctx.fillRect(x + 8, y + 12, 8, 6);
-                ctx.fillStyle = '#ddd'; ctx.fillRect(x + 10, y + 11, 8, 6);
+                if (!looted) {
+                    ctx.fillStyle = 'white'; ctx.fillRect(x + 8, y + 12, 8, 6);
+                    ctx.fillStyle = '#ddd'; ctx.fillRect(x + 10, y + 11, 8, 6);
+                }
             } else if (type === OBJ_CHAIR) {
                 ctx.fillStyle = '#333'; ctx.fillRect(x + 12, y + 25, 3, 10); ctx.fillRect(x + 25, y + 25, 3, 10);
                 ctx.fillStyle = '#222'; ctx.fillRect(x + 10, y + 20, 20, 5);
@@ -476,7 +484,10 @@
             } else if (type === OBJ_PLANT) {
                 ctx.fillStyle = '#d35400';
                 ctx.beginPath(); ctx.moveTo(x + 10, y + 35); ctx.lineTo(x + 30, y + 35); ctx.lineTo(x + 32, y + 20); ctx.lineTo(x + 8, y + 20); ctx.fill();
-                circle(ctx, x + 20, y + 15, 8, '#27ae60'); circle(ctx, x + 12, y + 18, 6, '#2ecc71'); circle(ctx, x + 28, y + 18, 6, '#2ecc71'); circle(ctx, x + 20, y + 8, 7, '#2ecc71');
+                circle(ctx, x + 20, y + 15, 8, '#27ae60'); 
+                if(!looted) { 
+                    circle(ctx, x + 12, y + 18, 6, '#2ecc71'); circle(ctx, x + 28, y + 18, 6, '#2ecc71'); circle(ctx, x + 20, y + 8, 7, '#2ecc71');
+                }
             } else if (type === OBJ_PRINTER) {
                 ctx.fillStyle = '#bdc3c7'; ctx.fillRect(x + 5, y + 10, 30, 20);
                 ctx.fillStyle = '#7f8c8d'; ctx.fillRect(x + 5, y + 10, 30, 5);
@@ -502,13 +513,8 @@
                 ctx.arc(x + 28, y + 25, 3, 0, Math.PI*2);
                 ctx.fill();
                 ctx.fillStyle = '#fff';
-                if (locked) {
-                    ctx.font = "bold 14px Arial";
-                    ctx.fillText("X", x+15, y+20);
-                } else {
-                    ctx.font = "bold 14px Arial";
-                    ctx.fillText("↑", x+15, y+20);
-                }
+                ctx.font = "bold 14px Arial";
+                ctx.fillText(locked ? "X" : "↑", x+15, y+20);
             }
         }
 
@@ -516,10 +522,10 @@
         
         function initMap() {
             mapSeedVal = 100 + currentStage * 997; 
-
             worldMap.length = 0;
             objectMap.length = 0;
             enemies.length = 0;
+            lootedObjects.length = 0; 
 
             for (let r = 0; r < MAP_ROWS; r++) {
                 const row = new Array(MAP_COLS).fill(TILE_WALL);
@@ -531,22 +537,18 @@
             const stack = [];
             const startR = 1;
             const startC = 1;
-            
             worldMap[startR][startC] = TILE_FLOOR;
             stack.push({r: startR, c: startC});
-
             let floorTiles = [];
 
             while (stack.length > 0) {
                 const current = stack[stack.length - 1];
                 const neighbors = [];
-
                 const directions = [{dr: -2, dc: 0}, {dr: 2, dc: 0}, {dr: 0, dc: -2}, {dr: 0, dc: 2}];
 
                 for (let d of directions) {
                     const nr = current.r + d.dr;
                     const nc = current.c + d.dc;
-
                     if (nr > 0 && nr < MAP_ROWS - 1 && nc > 0 && nc < MAP_COLS - 1) {
                         if (worldMap[nr][nc] === TILE_WALL) {
                             neighbors.push({r: nr, c: nc, linkR: current.r + d.dr/2, linkC: current.c + d.dc/2});
@@ -576,7 +578,6 @@
                     for (let cc = c; cc < c + w; cc++) {
                         const wasWall = worldMap[rr][cc] === TILE_WALL;
                         worldMap[rr][cc] = TILE_FLOOR;
-                        
                         if (wasWall) {
                              if (prng() < 0.4) {
                                 const roll = prng();
@@ -823,18 +824,47 @@
 
         function handleWorldInput(key) {
             if (key === 'Enter' || key === ' ') {
+                const cx = player.x + 15;
+                const cy = player.y + 15;
+                
+                // Coffee Machine
                 const dist = Math.sqrt((player.x - coffeeMachineLoc.x)**2 + (player.y - coffeeMachineLoc.y)**2);
                 if (dist < 60) {
                     player.hp = player.maxHp;
-                    player.status = null; // Coffee cures status
+                    player.status = null; 
                     floatingTexts.push({
-                        text: "Coffee Break! HP Maxed & Cured!",
+                        text: "Coffee Break! HP Maxed!",
                         x: player.x,
                         y: player.y - 30,
                         color: '#f1c40f',
                         time: 1.5
                     });
+                    return;
                 }
+
+                // Loot Desks/Plants (Grid Check)
+                const c = Math.floor(cx / TILE_SIZE);
+                const r = Math.floor(cy / TILE_SIZE);
+                const neighbors = [
+                    {r:r, c:c}, {r:r-1, c:c}, {r:r+1, c:c}, {r:r, c:c-1}, {r:r, c:c+1}
+                ];
+
+                let looted = false;
+                neighbors.forEach(n => {
+                    if (looted) return;
+                    const obj = objectMap[n.r][n.c];
+                    const id = `${n.r},${n.c}`;
+                    if ((obj === OBJ_DESK || obj === OBJ_PLANT) && !lootedObjects.includes(id)) {
+                        lootedObjects.push(id);
+                        if (Math.random() < 0.5) {
+                            player.inventory.donuts++;
+                            floatingTexts.push({ text: "Found Donut!", x: n.c*TILE_SIZE, y: n.r*TILE_SIZE, color: '#e67e22', time: 1.5 });
+                        } else {
+                            floatingTexts.push({ text: "Empty...", x: n.c*TILE_SIZE, y: n.r*TILE_SIZE, color: '#ccc', time: 1.0 });
+                        }
+                        looted = true;
+                    }
+                });
             }
         }
 
@@ -943,7 +973,8 @@
 
                     const obj = objectMap[r][c];
                     if (obj !== OBJ_NONE) {
-                        drawObject(ctx, x, y, obj);
+                        const id = `${r},${c}`;
+                        drawObject(ctx, x, y, obj, lootedObjects.includes(id));
                     }
                 }
             }
@@ -972,7 +1003,7 @@
             ctx.font = '16px Courier New';
             ctx.fillText(`${getTitle(player.level)} (Lvl ${player.level})`, 20, 35);
             ctx.fillStyle = '#FFD700'; 
-            ctx.fillText(`Score: ${player.score}`, 20, 50); 
+            ctx.fillText(`Score: ${player.score} | Donuts: ${player.inventory.donuts}`, 20, 50); 
             ctx.fillStyle = '#fff';
             ctx.fillText(`Stage: ${currentStage} | Enemies: ${enemies.length}`, 20, 65);
 
@@ -1015,9 +1046,6 @@
             currentState = STATE_BATTLE;
             currentEnemyIndex = index;
 
-            // Apply PRE-BATTLE Status effects (e.g. DoT)
-            // If player has Nausea, take damage at start of battle? No, turn based.
-
             battleState = {
                 enemy: enemy,
                 menuSelection: 0,
@@ -1034,11 +1062,10 @@
 
         function handleBattleInput(key) {
              if (battleState.phase === 'MENU') {
-                // Check if Player is Stunned
                 if (player.status && player.status.type === 'STUN') {
                     if (key === 'Enter' || key === ' ') {
                         battleState.log = "You are Stunned! Turn skipped.";
-                        player.status = null; // Clear stun after 1 turn
+                        player.status = null;
                         battleState.phase = 'BATTLE_ANIMATION';
                         setTimeout(enemyTurn, 1000);
                         return;
@@ -1051,7 +1078,7 @@
                     if (battleState.menuSelection === 0) {
                         battleState.phase = 'ATTACK_SELECT';
                         battleState.attackSelection = 0;
-                        battleState.log = "Select Attack:";
+                        battleState.log = "Select Action:";
                     } else if (battleState.menuSelection === 1) attemptCatch();
                     else if (battleState.menuSelection === 2) {
                         if (Math.random() < 0.5) {
@@ -1074,7 +1101,6 @@
                                     player.y = newY;
                                 }
                             }
-                            
                             battleCooldown = 2.0;
                             battleState.phase = 'END';
                         } else {
@@ -1101,39 +1127,44 @@
                      }
                      currentState = STATE_WORLD;
                  }
+            } else if (battleState.phase === 'GAME_OVER') {
+                 // handled by modal
             }
         }
 
         function performAttack(attack) {
-            // Apply Status damage to player if needed (Nausea)
             if (player.status && player.status.type === 'NAUSEA') {
                 player.hp -= 2;
                 if (player.hp <= 0) { player.hp = 0; currentState = STATE_GAME_OVER; return; }
             }
 
-            if (attack.heal) {
-                const healAmt = 5 + Math.floor(player.level);
-                player.hp = Math.min(player.maxHp, player.hp + healAmt);
-                player.status = null; // Coffee cures
-                battleState.log = `Drank Coffee! +${healAmt} HP. Cured!`;
+            if (attack.isItem) {
+                if (player.inventory.donuts > 0) {
+                    player.inventory.donuts--;
+                    player.hp = Math.min(player.maxHp, player.hp + 10);
+                    player.status = null;
+                    battleState.log = "Ate Donut! +10 HP.";
+                } else {
+                    battleState.log = "No Donuts left!";
+                }
                 battleState.phase = 'BATTLE_ANIMATION';
                 setTimeout(enemyTurn, 1000);
                 return;
             }
 
-            let damage = attack.damage + Math.floor(player.level / 2);
+            let multiplier = getTypeEffectiveness(player.dept, battleState.enemy.dept);
+            let damage = Math.floor(attack.damage * multiplier + player.level / 2);
             if (player.consultants > 0) damage += player.consultants;
 
-            // Apply Effect to Enemy
             if (attack.effect && Math.random() < attack.chance) {
                 battleState.enemy.status = { type: attack.effect };
                 battleState.log = `Used ${attack.name}! Enemy ${attack.effect}!`;
             } else {
-                battleState.log = `Used ${attack.name}! Dealt ${damage} dmg.`;
+                let effText = multiplier > 1 ? "Super Effective!" : (multiplier < 1 ? "Not Effective..." : "");
+                battleState.log = `Used ${attack.name}! ${damage} dmg. ${effText}`;
             }
             
             battleState.enemy.hp -= damage;
-            
             battleState.phase = 'BATTLE_ANIMATION';
 
             if (battleState.enemy.hp <= 0) {
@@ -1166,7 +1197,6 @@
         function enemyTurn() {
             if (currentState !== STATE_BATTLE) return;
             
-            // Check Enemy Status
             if (battleState.enemy.status) {
                 if (battleState.enemy.status.type === 'STUN') {
                     battleState.log = "Enemy is Stunned!";
@@ -1176,7 +1206,7 @@
                 }
                 if (battleState.enemy.status.type === 'CONFUSE') {
                     if (Math.random() < 0.5) {
-                        battleState.log = "Enemy is Confused! Hurts itself!";
+                        battleState.log = "Enemy Confused! Hurts itself!";
                         battleState.enemy.hp -= 3;
                         if (battleState.enemy.hp <= 0) { winBattle(); return; }
                         battleState.phase = 'MENU';
@@ -1189,17 +1219,17 @@
             const move = moves[Math.floor(Math.random() * moves.length)];
             
             const levelScale = 1 + (player.level * 0.1);
-            let damage = Math.floor(move.damage * levelScale);
-            
+            let multiplier = getTypeEffectiveness(move.type || FACT_NEUTRAL, player.dept);
+            let damage = Math.floor(move.damage * levelScale * multiplier);
             damage = Math.floor(damage * (0.8 + Math.random() * 0.4));
             if (damage < 1) damage = 1;
 
-            // Apply Effect to Player
             if (move.effect && Math.random() < move.chance) {
                 player.status = { type: move.effect };
                 battleState.log = `${battleState.enemy.name} used ${move.name}! You are ${move.effect}!`;
             } else {
-                battleState.log = `${battleState.enemy.name} used ${move.name}! -${damage} HP.`;
+                let effText = multiplier > 1 ? " (Ouch!)" : (multiplier < 1 ? " (Resisted)" : "");
+                battleState.log = `${battleState.enemy.name} used ${move.name}! -${damage} HP${effText}`;
             }
 
             player.hp -= damage;
@@ -1245,6 +1275,7 @@
             player.score = 0;
             player.consultants = 0;
             player.status = null;
+            player.inventory.donuts = 1;
             currentStage = 1;
 
             document.getElementById('game-over-modal').classList.add('hidden');
@@ -1272,32 +1303,40 @@
             ctx.font = 'bold 24px Courier New';
             ctx.textAlign = 'left';
             ctx.fillText(`${enemy.name} (Lvl ${player.level})`, 450, 80);
+            ctx.font = '16px Courier New';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText(`Faction: ${enemy.dept}`, 450, 100); 
             
             ctx.fillStyle = '#555';
             ctx.beginPath();
-            ctx.roundRect(450, 90, 200, 15, 5);
+            ctx.roundRect(450, 110, 200, 15, 5);
             ctx.fill();
             ctx.fillStyle = '#e74c3c';
             ctx.beginPath();
-            ctx.roundRect(450, 90, 200 * (enemy.hp / enemy.maxHp), 15, 5);
+            ctx.roundRect(450, 110, 200 * (enemy.hp / enemy.maxHp), 15, 5);
             ctx.fill();
 
             drawCharacter(ctx, 150, 200, player.type, 4, true, 0, player.status);
 
             ctx.fillStyle = 'white';
+            ctx.font = 'bold 24px Courier New';
             ctx.fillText(`${getTitle(player.level)}`, 100, 230);
+            ctx.font = '16px Courier New';
+            ctx.fillStyle = '#aaa';
+            ctx.fillText(`Faction: ${player.dept}`, 100, 250); 
             
             ctx.fillStyle = '#555';
             ctx.beginPath();
-            ctx.roundRect(100, 240, 200, 15, 5);
+            ctx.roundRect(100, 260, 200, 15, 5);
             ctx.fill();
             ctx.fillStyle = '#2ecc71';
             ctx.beginPath();
-            ctx.roundRect(100, 240, 200 * (player.hp / player.maxHp), 15, 5);
+            ctx.roundRect(100, 260, 200 * (player.hp / player.maxHp), 15, 5);
             ctx.fill();
             
+            ctx.fillStyle = 'white';
             ctx.font = '16px Courier New';
-            ctx.fillText(`${player.hp} / ${player.maxHp} HP`, 100, 275);
+            ctx.fillText(`${player.hp} / ${player.maxHp} HP`, 100, 295);
 
             ctx.fillStyle = COLOR_MENU_BG;
             ctx.fillRect(0, 400, SCREEN_WIDTH, 200);
@@ -1325,12 +1364,15 @@
                 });
             } else if (battleState.phase === 'ATTACK_SELECT') {
                 PLAYER_ATTACKS.forEach((att, index) => {
+                    let label = att.name;
+                    if (att.isItem) label = `Eat Donut (${player.inventory.donuts})`;
+                    
                     if (index === battleState.attackSelection) {
                          ctx.fillStyle = '#f1c40f';
-                        ctx.fillText(`> ${att.name}`, startX, startY + index * 30 - 20);
+                        ctx.fillText(`> ${label}`, startX, startY + index * 30 - 20);
                     } else {
                          ctx.fillStyle = 'white';
-                        ctx.fillText(`  ${att.name}`, startX, startY + index * 30 - 20);
+                        ctx.fillText(`  ${label}`, startX, startY + index * 30 - 20);
                     }
                 });
             } else if (battleState.phase === 'END' || battleState.phase === 'LEVEL_UP') {
