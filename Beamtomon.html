@@ -8,7 +8,7 @@
         body {
             margin: 0;
             padding: 0;
-            background-color: #202020;
+            background-color: #111;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -25,14 +25,71 @@
             width: 100%;
             height: 100%;
             max-width: 1280px;
-            max-height: 720px;
+            max-height: 800px; /* Increased slightly to fit UI */
+            display: flex;
+            flex-direction: column;
+            background: #202020;
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* --- New UI Panel --- */
+        #ui-panel {
+            background-color: #2c3e50;
+            border-bottom: 4px solid #fff;
+            padding: 10px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            height: 80px;
+            flex-shrink: 0;
+            z-index: 10;
+            box-sizing: border-box;
+        }
+
+        .ui-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .ui-stat {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bar-container {
+            width: 100px;
+            height: 10px;
+            background: #555;
+            border: 1px solid #fff;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            transition: width 0.2s;
+        }
+
+        .hp-fill { background-color: #e74c3c; }
+        .xp-fill { background-color: #3498db; }
+
+        #ui-score { color: #f1c40f; }
+        #ui-donuts { color: #e67e22; }
+
+        /* Canvas Area */
+        #canvas-wrapper {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+            background: #000;
         }
 
         canvas {
             width: 100%;
             height: 100%;
-            background-color: #000;
             display: block;
             image-rendering: pixelated; 
         }
@@ -45,6 +102,7 @@
             width: 100%;
             height: 100%;
             pointer-events: none;
+            z-index: 20;
         }
 
         .joystick-area {
@@ -81,36 +139,35 @@
             position: absolute;
             bottom: 40px;
             right: 40px;
-            width: 180px;
-            height: 150px;
+            width: 100px;
+            height: 100px;
             pointer-events: auto;
         }
 
         .action-btn {
             position: absolute;
+            bottom: 10px;
+            right: 10px;
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(0, 255, 0, 0.15);
             border: 2px solid rgba(255, 255, 255, 0.25);
-            width: 70px;
-            height: 70px;
+            width: 80px;
+            height: 80px;
             display: flex;
             justify-content: center;
             align-items: center;
             cursor: pointer;
             font-weight: bold;
-            font-size: 24px;
+            font-size: 28px;
             touch-action: manipulation;
             transition: transform 0.1s;
             text-shadow: 0 2px 2px rgba(0,0,0,0.25);
         }
 
         .action-btn:active, .action-btn.active {
-             background: rgba(255, 255, 255, 0.25);
+             background: rgba(0, 255, 0, 0.3);
              transform: scale(0.95);
         }
-
-        .btn-a { bottom: 20px; right: 0px; background-color: rgba(0, 255, 0, 0.15); }
-        .btn-b { bottom: 0px; right: 90px; background-color: rgba(255, 0, 0, 0.15); }
 
         #game-over-modal {
             position: absolute;
@@ -175,23 +232,45 @@
 </head>
 <body>
     <div id="game-container">
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
-        
-        <div id="game-over-modal" class="hidden">
-            <div class="modal-content">
-                <div class="modal-title">Burnout!</div>
-                <div class="modal-score" id="final-score">Score: 0</div>
-                <button class="restart-btn" onclick="restartGame()">Back to Work</button>
+        <!-- New UI Panel (Above Play Field) -->
+        <div id="ui-panel">
+            <div class="ui-row">
+                <span id="ui-name">Intern (Lvl 1)</span>
+                <span id="ui-score">Score: 0</span>
+                <span id="ui-stage">Stage: 1</span>
+            </div>
+            <div class="ui-row">
+                <div class="ui-stat">
+                    <span>HP:</span>
+                    <div class="bar-container"><div id="bar-hp" class="bar-fill hp-fill" style="width: 100%;"></div></div>
+                    <span id="text-hp">20/20</span>
+                </div>
+                <div class="ui-stat">
+                    <span>XP:</span>
+                    <div class="bar-container"><div id="bar-xp" class="bar-fill xp-fill" style="width: 0%;"></div></div>
+                </div>
+                <span id="ui-donuts">🍩 x1</span>
             </div>
         </div>
 
-        <div class="controls-container">
-            <div class="joystick-area" id="joystick">
-                <div class="joystick-knob" id="joystick-knob"></div>
+        <div id="canvas-wrapper">
+            <canvas id="gameCanvas" width="800" height="600"></canvas>
+            
+            <div id="game-over-modal" class="hidden">
+                <div class="modal-content">
+                    <div class="modal-title">Burnout!</div>
+                    <div class="modal-score" id="final-score">Score: 0</div>
+                    <button class="restart-btn" onclick="restartGame()">Back to Work</button>
+                </div>
             </div>
-            <div class="actions">
-                <div class="action-btn btn-a" data-key="Enter">A</div>
-                <div class="action-btn btn-b" data-key="Escape">B</div>
+
+            <div class="controls-container">
+                <div class="joystick-area" id="joystick">
+                    <div class="joystick-knob" id="joystick-knob"></div>
+                </div>
+                <div class="actions">
+                    <div class="action-btn btn-a" data-key="Enter">A</div>
+                </div>
             </div>
         </div>
     </div>
@@ -226,14 +305,12 @@
         const COLOR_MENU_BG = '#303030';
         const COLOR_MENU_BORDER = '#ffffff';
 
-        // Factions (Types)
-        const FACT_OFFICER = 'OFFICER';     // Authority
-        const FACT_POLITICIAN = 'POLITICIAN'; // Power
-        const FACT_CITIZEN = 'CITIZEN';     // Public
+        // Factions
+        const FACT_OFFICER = 'OFFICER';     
+        const FACT_POLITICIAN = 'POLITICIAN'; 
+        const FACT_CITIZEN = 'CITIZEN';     
         const FACT_NEUTRAL = 'NEUTRAL'; 
 
-        // Type Advantage Chart
-        // OFFICER > CITIZEN > POLITICIAN > OFFICER
         function getTypeEffectiveness(attackerType, defenderType) {
             if (attackerType === FACT_OFFICER && defenderType === FACT_CITIZEN) return 1.5;
             if (attackerType === FACT_CITIZEN && defenderType === FACT_POLITICIAN) return 1.5;
@@ -287,16 +364,14 @@
             consultants: 0,
             inventory: { donuts: 1 },
             status: null,
-            isWalking: false // NEW
+            isWalking: false
         };
 
         let coffeeMachineLoc = { x: 0, y: 0 };
         let exitDoorLoc = { x: 0, y: 0 };
 
-        // ENGLISH TITLES
         const TITLES = ["Intern", "Junior Associate", "Senior Associate", "Manager", "Director"];
         
-        // Attack Types
         const PLAYER_ATTACKS = [
             { name: "Permission Denied", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }, 
             { name: "Pass the Buck", damage: 6, type: FACT_POLITICIAN },
@@ -369,16 +444,13 @@
             const h = 30 * scale;
             const cx = x + w / 2;
             
-            // Animation Calculations
             const bobSpeed = isWalking ? 100 : 250;
             const bobAmt = isWalking ? 3 : 1;
             const drawY = y + Math.sin(Date.now() / bobSpeed) * (bobAmt * scale);
 
-            // Leg Animation
             let legOffsetL = 0;
             let legOffsetR = 0;
             if (isWalking) {
-                const walkSpeed = 10;
                 const t = Date.now() / 100;
                 legOffsetL = Math.sin(t) * (3 * scale);
                 legOffsetR = Math.sin(t + Math.PI) * (3 * scale);
@@ -402,7 +474,6 @@
             }
 
             ctx.save();
-            // Shadow
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath();
             ctx.ellipse(cx, y + h - 2*scale, w/2, h/6, 0, 0, Math.PI*2);
@@ -416,7 +487,6 @@
             ctx.fillStyle = shirtColor;
             ctx.fillRect(x + w*0.2, drawY + h*0.4, w*0.6, h*0.4);
 
-            // Legs with walking offset
             ctx.fillStyle = pantsColor;
             ctx.fillRect(x + w*0.25, drawY + h*0.75 + legOffsetL, w*0.2, h*0.25);
             ctx.fillRect(x + w*0.55, drawY + h*0.75 + legOffsetR, w*0.2, h*0.25);
@@ -462,10 +532,8 @@
                 }
             }
             
-            // Arms
             ctx.fillStyle = shirtColor;
             ctx.beginPath();
-            // Swing arms if walking
             const armSwing = isWalking ? Math.sin(Date.now() / 100) * (3*scale) : 0;
             ctx.ellipse(x + w*0.1, drawY + h*0.5 + armSwing, w*0.1, h*0.2, 0, 0, Math.PI*2);
             ctx.ellipse(x + w*0.9, drawY + h*0.5 - armSwing, w*0.1, h*0.2, 0, 0, Math.PI*2);
@@ -828,6 +896,25 @@
             return TITLES[Math.min(index, TITLES.length - 1)];
         }
 
+        function updateHUD() {
+            const uiPanel = document.getElementById('ui-panel');
+            if (currentState === STATE_BATTLE) {
+                uiPanel.classList.add('hidden');
+                return;
+            } else {
+                uiPanel.classList.remove('hidden');
+            }
+
+            document.getElementById('ui-name').innerText = `${getTitle(player.level)} (Lvl ${player.level})`;
+            document.getElementById('ui-score').innerText = `Score: ${player.score}`;
+            document.getElementById('ui-stage').innerText = `Stage: ${currentStage}`;
+            document.getElementById('ui-donuts').innerText = `🍩 x${player.inventory.donuts}`;
+            
+            document.getElementById('text-hp').innerText = `${Math.floor(player.hp)}/${player.maxHp}`;
+            document.getElementById('bar-hp').style.width = `${(player.hp / player.maxHp) * 100}%`;
+            document.getElementById('bar-xp').style.width = `${(player.xp / player.nextLevelXp) * 100}%`;
+        }
+
         // --- World Update ---
         function updateBattleJoystick(dt) {
             joystickTimer -= dt;
@@ -847,7 +934,6 @@
                 const cx = player.x + 15;
                 const cy = player.y + 15;
                 
-                // Coffee Machine
                 const dist = Math.sqrt((player.x - coffeeMachineLoc.x)**2 + (player.y - coffeeMachineLoc.y)**2);
                 if (dist < 60) {
                     player.hp = player.maxHp;
@@ -859,10 +945,10 @@
                         color: '#f1c40f',
                         time: 1.5
                     });
+                    updateHUD();
                     return;
                 }
 
-                // Loot Desks/Plants (Grid Check)
                 const c = Math.floor(cx / TILE_SIZE);
                 const r = Math.floor(cy / TILE_SIZE);
                 const neighbors = [
@@ -883,6 +969,7 @@
                             floatingTexts.push({ text: "Empty...", x: n.c*TILE_SIZE, y: n.r*TILE_SIZE, color: '#ccc', time: 1.0 });
                         }
                         looted = true;
+                        updateHUD();
                     }
                 });
             }
@@ -943,6 +1030,7 @@
                     break;
                 }
             }
+            updateHUD();
         }
 
         function nextStage() {
@@ -1019,37 +1107,6 @@
 
             drawCharacter(ctx, player.x, player.y, player.type, 1, false, 0, player.status, player.isWalking);
             
-            // HUD
-            ctx.textAlign = 'left';
-            ctx.fillStyle = 'rgba(0,0,0,0.8)';
-            ctx.fillRect(10, 10, 280, 105); 
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(10, 10, 280, 105);
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = '16px Courier New';
-            ctx.fillText(`${getTitle(player.level)} (Lvl ${player.level})`, 20, 35);
-            ctx.fillStyle = '#FFD700'; 
-            ctx.fillText(`Score: ${player.score} | Donuts: ${player.inventory.donuts}`, 20, 50); 
-            ctx.fillStyle = '#fff';
-            ctx.fillText(`Stage: ${currentStage} | Enemies: ${enemies.length}`, 20, 65);
-
-            ctx.fillStyle = '#e74c3c';
-            ctx.fillRect(20, 80, 100, 8);
-            ctx.fillStyle = '#2ecc71';
-            ctx.fillRect(20, 80, 100 * (player.hp / player.maxHp), 8);
-            
-            ctx.fillStyle = '#7f8c8d';
-            ctx.fillRect(130, 80, 100, 8);
-            ctx.fillStyle = '#3498db';
-            ctx.fillRect(130, 80, 100 * (player.xp / player.nextLevelXp), 8);
-            
-            ctx.font = '10px Courier New';
-            ctx.fillStyle = '#fff';
-            ctx.fillText(`HP: ${player.hp}/${player.maxHp}`, 20, 100);
-            ctx.fillText(`XP: ${player.xp}/${player.nextLevelXp}`, 130, 100);
-
             floatingTexts.forEach(txt => {
                 ctx.save();
                 ctx.fillStyle = txt.color;
@@ -1073,6 +1130,7 @@
         function startBattle(enemy, index) {
             currentState = STATE_BATTLE;
             currentEnemyIndex = index;
+            updateHUD(); // Hide HUD
 
             battleState = {
                 enemy: enemy,
@@ -1080,7 +1138,8 @@
                 attackSelection: 0,
                 phase: 'MENU',
                 log: `You encountered a ${enemy.name}!`,
-                turn: 'PLAYER'
+                turn: 'PLAYER',
+                onAck: null // Wait for A
             };
 
             joystickVector = { x: 0, y: 0 };
@@ -1089,13 +1148,24 @@
         }
 
         function handleBattleInput(key) {
+             if (battleState.phase === 'MESSAGE') {
+                 if (key === 'Enter' || key === ' ') {
+                     if (battleState.onAck) {
+                         const callback = battleState.onAck;
+                         battleState.onAck = null; 
+                         callback();
+                     }
+                 }
+                 return;
+             }
+
              if (battleState.phase === 'MENU') {
                 if (player.status && player.status.type === 'STUN') {
                     if (key === 'Enter' || key === ' ') {
                         battleState.log = "You are Stunned! Turn skipped.";
                         player.status = null;
-                        battleState.phase = 'BATTLE_ANIMATION';
-                        setTimeout(enemyTurn, 1000);
+                        battleState.phase = 'MESSAGE';
+                        battleState.onAck = () => enemyTurn();
                         return;
                     }
                 }
@@ -1130,21 +1200,18 @@
                                 }
                             }
                             battleCooldown = 2.0;
-                            battleState.phase = 'END';
+                            battleState.phase = 'MESSAGE';
+                            battleState.onAck = () => { currentState = STATE_WORLD; updateHUD(); };
                         } else {
                             battleState.log = "Failed to run!";
-                            battleState.phase = 'BATTLE_ANIMATION';
-                            setTimeout(enemyTurn, 1000);
+                            battleState.phase = 'MESSAGE';
+                            battleState.onAck = () => enemyTurn();
                         }
                     }
                 }
             } else if (battleState.phase === 'ATTACK_SELECT') {
                 if (key === 'ArrowUp') battleState.attackSelection = (battleState.attackSelection - 1 + 4) % 4;
                 if (key === 'ArrowDown') battleState.attackSelection = (battleState.attackSelection + 1) % 4;
-                if (key === 'Escape') {
-                    battleState.phase = 'MENU';
-                    battleState.log = "What will you do?";
-                }
                 if (key === 'Enter' || key === ' ') performAttack(PLAYER_ATTACKS[battleState.attackSelection]);
             } else if (battleState.phase === 'END' || battleState.phase === 'LEVEL_UP') {
                  if (key === 'Enter' || key === ' ') {
@@ -1154,9 +1221,8 @@
                          }
                      }
                      currentState = STATE_WORLD;
+                     updateHUD();
                  }
-            } else if (battleState.phase === 'GAME_OVER') {
-                 // Nothing specific, handled by modal
             }
         }
 
@@ -1175,8 +1241,8 @@
                 } else {
                     battleState.log = "No Donuts left!";
                 }
-                battleState.phase = 'BATTLE_ANIMATION';
-                setTimeout(enemyTurn, 1000);
+                battleState.phase = 'MESSAGE';
+                battleState.onAck = () => enemyTurn();
                 return;
             }
 
@@ -1193,14 +1259,16 @@
             }
             
             battleState.enemy.hp -= damage;
-            battleState.phase = 'BATTLE_ANIMATION';
-
-            if (battleState.enemy.hp <= 0) {
-                battleState.enemy.hp = 0;
-                setTimeout(() => winBattle(), 1000);
-            } else {
-                setTimeout(enemyTurn, 1000);
-            }
+            
+            battleState.phase = 'MESSAGE';
+            battleState.onAck = () => {
+                if (battleState.enemy.hp <= 0) {
+                    battleState.enemy.hp = 0;
+                    winBattle();
+                } else {
+                    enemyTurn();
+                }
+            };
         }
 
         function attemptCatch() {
@@ -1208,17 +1276,17 @@
                 if (Math.random() < 0.6) {
                     player.consultants++;
                     battleState.log = "Hired Consultant!";
-                    battleState.phase = 'END';
-                    battleState.enemy.hp = 0; 
+                    battleState.phase = 'MESSAGE';
+                    battleState.onAck = () => { currentState = STATE_WORLD; enemies.splice(currentEnemyIndex, 1); updateHUD(); };
                 } else {
                     battleState.log = "Offer refused!";
-                    battleState.phase = 'BATTLE_ANIMATION';
-                    setTimeout(enemyTurn, 1000);
+                    battleState.phase = 'MESSAGE';
+                    battleState.onAck = () => enemyTurn();
                 }
             } else {
                 battleState.log = "Can only hire Consultants!";
-                battleState.phase = 'BATTLE_ANIMATION';
-                setTimeout(() => { battleState.phase = 'MENU'; battleState.log = "Action?"; }, 1000);
+                battleState.phase = 'MESSAGE';
+                battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
             }
         }
 
@@ -1229,15 +1297,19 @@
                 if (battleState.enemy.status.type === 'STUN') {
                     battleState.log = "Enemy is Stunned!";
                     battleState.enemy.status = null;
-                    battleState.phase = 'MENU';
+                    battleState.phase = 'MESSAGE';
+                    battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
                     return;
                 }
                 if (battleState.enemy.status.type === 'CONFUSE') {
                     if (Math.random() < 0.5) {
                         battleState.log = "Enemy Confused! Hurts itself!";
                         battleState.enemy.hp -= 3;
-                        if (battleState.enemy.hp <= 0) { winBattle(); return; }
-                        battleState.phase = 'MENU';
+                        battleState.phase = 'MESSAGE';
+                        battleState.onAck = () => {
+                            if (battleState.enemy.hp <= 0) winBattle();
+                            else { battleState.phase = 'MENU'; battleState.log = "Action?"; }
+                        };
                         return;
                     }
                 }
@@ -1263,15 +1335,18 @@
             player.hp -= damage;
             shakeAmount = 20;
 
-            if (player.hp <= 0) {
-                player.hp = 0;
-                currentState = STATE_GAME_OVER;
-                document.getElementById('final-score').innerText = `Score: ${player.score}`;
-                document.getElementById('game-over-modal').classList.remove('hidden');
-                battleState.phase = 'GAME_OVER';
-            } else {
-                battleState.phase = 'MENU';
-            }
+            battleState.phase = 'MESSAGE';
+            battleState.onAck = () => {
+                if (player.hp <= 0) {
+                    player.hp = 0;
+                    currentState = STATE_GAME_OVER;
+                    document.getElementById('final-score').innerText = `Score: ${player.score}`;
+                    document.getElementById('game-over-modal').classList.remove('hidden');
+                } else {
+                    battleState.phase = 'MENU';
+                    battleState.log = "Action?";
+                }
+            };
         }
 
         function winBattle() {
@@ -1280,8 +1355,15 @@
             const scoreGain = battleState.enemy.maxHp * 10;
             player.score += scoreGain;
             battleState.log = `Win! +${xpGain} XP. +${scoreGain} Pts.`;
-            if (player.xp >= player.nextLevelXp) setTimeout(() => levelUp(), 1000);
-            else battleState.phase = 'END';
+            battleState.phase = 'MESSAGE';
+            battleState.onAck = () => {
+                if (player.xp >= player.nextLevelXp) levelUp();
+                else {
+                    if (currentEnemyIndex > -1) enemies.splice(currentEnemyIndex, 1);
+                    currentState = STATE_WORLD;
+                    updateHUD();
+                }
+            };
         }
 
         function levelUp() {
@@ -1291,7 +1373,12 @@
             player.maxHp += 5;
             player.hp = player.maxHp;
             battleState.log = `Promoted to ${getTitle(player.level)}!`;
-            battleState.phase = 'LEVEL_UP';
+            battleState.phase = 'MESSAGE';
+            battleState.onAck = () => {
+                if (currentEnemyIndex > -1) enemies.splice(currentEnemyIndex, 1);
+                currentState = STATE_WORLD;
+                updateHUD();
+            };
         }
 
         function restartGame() {
@@ -1309,6 +1396,7 @@
             document.getElementById('game-over-modal').classList.add('hidden');
             initMap();
             currentState = STATE_WORLD;
+            updateHUD();
             draw();
         }
 
@@ -1379,7 +1467,11 @@
             const startX = 500;
             const startY = 480;
 
-            if (battleState.phase === 'MENU') {
+            if (battleState.phase === 'MESSAGE') {
+                 ctx.fillStyle = '#f1c40f'; // Gold indicator
+                 ctx.font = 'bold 20px Courier New';
+                 ctx.fillText("[Press A to continue]", 500, 560);
+            } else if (battleState.phase === 'MENU') {
                 const options = ["FIGHT", "HIRE", "RUN"];
                 options.forEach((opt, index) => {
                     if (index === battleState.menuSelection) {
@@ -1403,11 +1495,6 @@
                         ctx.fillText(`  ${label}`, startX, startY + index * 30 - 20);
                     }
                 });
-            } else if (battleState.phase === 'END' || battleState.phase === 'LEVEL_UP') {
-                 ctx.fillStyle = '#f1c40f';
-                 ctx.fillText("Press A to continue...", startX, startY + 40);
-            } else if (battleState.phase === 'GAME_OVER') {
-                 // Nothing specific, handled by modal
             }
         }
 
