@@ -26,7 +26,6 @@
             height: 100%;
             max-width: 1280px;
             max-height: 720px;
-            /* Keep aspect ratio roughly consistent if desired, or fill screen */
         }
 
         canvas {
@@ -37,7 +36,6 @@
             image-rendering: pixelated;
         }
 
-        /* Virtual Controls */
         .controls-container {
             position: absolute;
             top: 0;
@@ -123,10 +121,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Resize Canvas to fit container resolution (internal resolution fixed or scaled)
-        // For pixel art look, keeping fixed resolution is often better, but scaling with CSS.
-        // Here we keep 800x600 internal but scaled by CSS.
-
         // Game Constants
         const TILE_SIZE = 40;
         const SCREEN_WIDTH = 800;
@@ -160,15 +154,15 @@
         // Input
         const keys = {};
         let joystickVector = { x: 0, y: 0 };
-        let joystickTimer = 0; // Debounce for joystick menu navigation
+        let joystickTimer = 0;
 
         // Player Object
         const player = {
-            x: 100, // Pixel coordinates now
+            x: 100,
             y: 100,
             width: 30,
             height: 30,
-            speed: 200, // pixels per second
+            speed: 200,
             color: COLOR_PLAYER,
             level: 1,
             hp: 20,
@@ -187,11 +181,125 @@
             { name: "Form A38", damage: 8 }
         ];
         const ENEMY_TYPES = [
-            { name: "Consultant", color: "#FFA500", hp: 15, xp: 20, width: 30, height: 30 },
-            { name: "Politician", color: "#800080", hp: 25, xp: 30, width: 30, height: 30 },
-            { name: "Citizen", color: "#008000", hp: 10, xp: 10, width: 30, height: 30 },
-            { name: "Beamter", color: "#808080", hp: 20, xp: 25, width: 30, height: 30 }
+            { name: "Consultant", typeName: "Consultant", hp: 15, xp: 20, width: 30, height: 30 },
+            { name: "Politician", typeName: "Politician", hp: 25, xp: 30, width: 30, height: 30 },
+            { name: "Citizen", typeName: "Citizen", hp: 10, xp: 10, width: 30, height: 30 },
+            { name: "Beamter", typeName: "Beamter", hp: 20, xp: 25, width: 30, height: 30 }
         ];
+
+        // --- Renderer Module ---
+        const Renderer = {
+            drawPerson: function(ctx, x, y, width, height, type, isBackView = false) {
+                const headSize = width * 0.4;
+                const bodyW = width * 0.6;
+                const bodyH = height * 0.4;
+                const limbW = width * 0.15;
+                const centerX = x + width / 2;
+
+                // Color mapping
+                let suitColor = '#333';
+                let skinColor = '#ffccaa';
+                let accessoryColor = null;
+
+                if (type === 'Player' || type === 'Beamter') suitColor = '#0000AA'; // Blue suit
+                else if (type === 'Consultant') suitColor = '#FFA500'; // Orange suit
+                else if (type === 'Politician') suitColor = '#500050'; // Purple suit
+                else if (type === 'Citizen') suitColor = '#008000'; // Green casual
+
+                // Legs
+                ctx.fillStyle = '#000';
+                ctx.fillRect(centerX - bodyW/2, y + height * 0.6, limbW, height * 0.4); // Left leg
+                ctx.fillRect(centerX + bodyW/2 - limbW, y + height * 0.6, limbW, height * 0.4); // Right leg
+
+                // Body
+                ctx.fillStyle = suitColor;
+                ctx.fillRect(centerX - bodyW/2, y + headSize, bodyW, bodyH);
+
+                // Head
+                ctx.fillStyle = skinColor;
+                ctx.beginPath();
+                ctx.arc(centerX, y + headSize/2, headSize/2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Features based on type/view
+                if (!isBackView) {
+                    // Face (Eyes)
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(centerX - 4, y + headSize/2 - 2, 2, 2);
+                    ctx.fillRect(centerX + 2, y + headSize/2 - 2, 2, 2);
+
+                    // Details
+                    if (type === 'Politician') {
+                        // Sash
+                        ctx.strokeStyle = 'red';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(centerX + bodyW/2, y + headSize);
+                        ctx.lineTo(centerX - bodyW/2, y + headSize + bodyH);
+                        ctx.stroke();
+                    } else if (type === 'Consultant') {
+                        // Briefcase
+                        ctx.fillStyle = '#402000';
+                        ctx.fillRect(x + width - 10, y + height/2 + 5, 12, 10);
+                    } else if (type === 'Player' || type === 'Beamter') {
+                        // Tie
+                        ctx.fillStyle = 'red';
+                        ctx.fillRect(centerX - 2, y + headSize + 2, 4, 10);
+                    }
+                } else {
+                    // Back of head (Hair)
+                    ctx.fillStyle = '#332211';
+                    ctx.beginPath();
+                    ctx.arc(centerX, y + headSize/2 - 2, headSize/2, 0, Math.PI, true);
+                    ctx.fill();
+                }
+            },
+
+            drawObject: function(ctx, x, y, size, type) {
+                 if (type === OBJ_DESK) {
+                     // Desk
+                     ctx.fillStyle = '#8B4513'; // Wood
+                     ctx.fillRect(x, y + size/2, size, size/2); // Table top
+                     ctx.fillStyle = '#553311'; // Legs
+                     ctx.fillRect(x+2, y+size/2, 4, size/2);
+                     ctx.fillRect(x+size-6, y+size/2, 4, size/2);
+                     // Computer
+                     ctx.fillStyle = '#333';
+                     ctx.fillRect(x + size/2 - 5, y + size/2 - 12, 14, 10); // Monitor
+                     ctx.fillStyle = '#111';
+                     ctx.fillRect(x + size/2 - 2, y + size/2 - 2, 8, 2); // Stand
+                 } else if (type === OBJ_CHAIR) {
+                     // Chair
+                     ctx.fillStyle = '#111';
+                     ctx.fillRect(x + size/4, y + size/2, size/2, size/2 - 2); // Seat
+                     ctx.fillRect(x + size/4, y + size/4, size/2, size/4); // Backrest
+                     ctx.fillStyle = '#444'; // Wheels
+                     ctx.fillRect(x + size/4, y + size - 4, 4, 4);
+                     ctx.fillRect(x + size*3/4 - 4, y + size - 4, 4, 4);
+                 } else if (type === OBJ_PLANT) {
+                     // Plant
+                     ctx.fillStyle = '#A0522D'; // Pot
+                     ctx.beginPath();
+                     ctx.arc(x + size/2, y + size - 8, 8, 0, Math.PI, false);
+                     ctx.fill();
+                     // Leaves
+                     ctx.fillStyle = '#228B22';
+                     ctx.beginPath();
+                     ctx.arc(x + size/2, y + size/2, 10, 0, Math.PI*2);
+                     ctx.arc(x + size/2 - 8, y + size/2 + 5, 6, 0, Math.PI*2);
+                     ctx.arc(x + size/2 + 8, y + size/2 + 5, 6, 0, Math.PI*2);
+                     ctx.fill();
+                 } else if (type === OBJ_PRINTER) {
+                     // Printer
+                     ctx.fillStyle = '#DDD';
+                     ctx.fillRect(x + 5, y + 10, size - 10, size - 15);
+                     ctx.fillStyle = '#333';
+                     ctx.fillRect(x + 10, y + 15, size - 20, 5); // Slot
+                     ctx.fillStyle = '#FFF';
+                     ctx.fillRect(x + 10, y + 2, size - 20, 8); // Paper
+                 }
+            }
+        };
 
         // Map Data
         const worldMap = [];
@@ -474,29 +582,14 @@
                     // Objects
                     const obj = objectMap[r][c];
                     if (obj !== OBJ_NONE) {
-                        if (obj === OBJ_DESK) {
-                             ctx.fillStyle = '#8B4513'; // Brown Desk
-                             ctx.fillRect(x+5, y+10, 30, 20);
-                        } else if (obj === OBJ_CHAIR) {
-                             ctx.fillStyle = '#000000'; // Chair
-                             ctx.fillRect(x+10, y+10, 20, 20);
-                        } else if (obj === OBJ_PLANT) {
-                             ctx.fillStyle = '#006400'; // Green Plant
-                             ctx.beginPath();
-                             ctx.arc(x+20, y+20, 10, 0, Math.PI*2);
-                             ctx.fill();
-                        } else if (obj === OBJ_PRINTER) {
-                             ctx.fillStyle = '#dddddd'; // Printer
-                             ctx.fillRect(x+5, y+5, 30, 30);
-                        }
+                        Renderer.drawObject(ctx, x, y, TILE_SIZE, obj);
                     }
                 }
             }
 
             // Draw Enemies
             enemies.forEach(e => {
-                ctx.fillStyle = e.color;
-                ctx.fillRect(e.x, e.y, e.width, e.height);
+                Renderer.drawPerson(ctx, e.x, e.y, e.width, e.height, e.typeName);
                 // Name tag
                 ctx.fillStyle = 'white';
                 ctx.font = '10px Arial';
@@ -504,8 +597,7 @@
             });
 
             // Draw Player
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
+            Renderer.drawPerson(ctx, player.x, player.y, player.width, player.height, 'Player');
 
             // UI Overlay
             ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -664,8 +756,8 @@
 
             // Enemy
             const enemy = battleState.enemy;
-            ctx.fillStyle = enemy.color;
-            ctx.fillRect(500, 100, 100, 100);
+            // Use complex drawing for enemy
+            Renderer.drawPerson(ctx, 500, 100, 100, 100, enemy.typeName, false);
 
             // Enemy Stats
             ctx.fillStyle = 'black';
@@ -678,8 +770,8 @@
             ctx.fillRect(450, 90, 200 * (enemy.hp / enemy.maxHp), 10);
 
             // Player (Back view representation)
-            ctx.fillStyle = player.color;
-            ctx.fillRect(150, 250, 100, 100);
+            // Use complex drawing for player
+            Renderer.drawPerson(ctx, 150, 250, 100, 100, 'Player', true);
 
             // Player Stats
             ctx.fillStyle = 'black';
