@@ -165,7 +165,7 @@
             justify-content: center;
             align-items: center;
             z-index: 100;
-            pointer-events: auto; /* Force pointer events */
+            pointer-events: auto;
         }
 
         .hidden { display: none !important; }
@@ -254,18 +254,16 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Game Constants (Internal Resolution)
+        // Game Constants
         const TILE_SIZE = 40;
         const SCREEN_WIDTH = 800;
         const SCREEN_HEIGHT = 600;
         const MAP_COLS = SCREEN_WIDTH / TILE_SIZE;
         const MAP_ROWS = SCREEN_HEIGHT / TILE_SIZE;
 
-        // Tile Types
         const TILE_FLOOR = 0;
         const TILE_WALL = 1;
 
-        // Object Types
         const OBJ_NONE = 0;
         const OBJ_DESK = 1;
         const OBJ_CHAIR = 2;
@@ -274,7 +272,6 @@
         const OBJ_COFFEE_MACHINE = 5;
         const OBJ_EXIT_DOOR = 6; 
 
-        // Colors
         const COLOR_FLOOR = '#e0e0e0';
         const COLOR_WALL = '#555555';
         const COLOR_MENU_BG = '#303030';
@@ -301,6 +298,7 @@
         let currentState = STATE_WORLD;
         let shakeAmount = 0;
         let battleCooldown = 0; 
+        let battleState = null; 
         
         let currentStage = 1;
         let mapSeedVal = 100;
@@ -324,6 +322,7 @@
             speed: 200,
             color: '#3498db',
             type: "Beamter",
+            name: "Officer", // FIXED: Added Name
             dept: FACT_OFFICER, 
             level: 1,
             hp: 20,
@@ -334,7 +333,8 @@
             signatures: 0,
             inventory: { donuts: 1 },
             status: null,
-            isWalking: false
+            isWalking: false,
+            consultants: []
         };
 
         const SIGNATURES_NEEDED = 3;
@@ -390,8 +390,27 @@
         const enemies = [];
         const lootedObjects = []; 
 
+        function getTitle(level) {
+            const index = Math.floor((level - 1) / 5);
+            return TITLES[Math.min(index, TITLES.length - 1)];
+        }
+
+        function getActiveFighter() {
+            if (!battleState || battleState.fighterIndex === -1) return player;
+            return player.consultants[battleState.fighterIndex];
+        }
+
         function updateHUD() {
-            document.getElementById('ui-name').innerText = `${getTitle(player.level)} (Lvl ${player.level})`;
+            const fighter = (currentState === STATE_BATTLE && battleState) ? getActiveFighter() : player;
+            
+            let nameDisplay = "";
+            if (fighter === player) {
+                nameDisplay = `${getTitle(player.level)} (Lvl ${player.level})`;
+            } else {
+                nameDisplay = `${fighter.name} (Lvl ${fighter.level})`;
+            }
+
+            document.getElementById('ui-name').innerText = nameDisplay;
             document.getElementById('ui-score').innerText = `${player.score} Pts`;
             document.getElementById('ui-stage').innerText = `Stg ${currentStage}`;
             
@@ -401,8 +420,9 @@
 
             document.getElementById('ui-donuts').innerText = `🍩 x${player.inventory.donuts}`;
             
-            document.getElementById('bar-hp').style.width = `${Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100))}%`;
-            document.getElementById('bar-xp').style.width = `${Math.max(0, Math.min(100, (player.xp / player.nextLevelXp) * 100))}%`;
+            document.getElementById('bar-hp').style.width = `${Math.max(0, Math.min(100, (fighter.hp / fighter.maxHp) * 100))}%`;
+            const xpPct = fighter.nextLevelXp ? (fighter.xp / fighter.nextLevelXp) * 100 : 0;
+            document.getElementById('bar-xp').style.width = `${Math.max(0, Math.min(100, xpPct))}%`;
         }
 
         // --- Drawing Helpers ---
@@ -736,6 +756,8 @@
                             maxHp: type.hp + currentStage * 2,
                             hp: type.hp + currentStage * 2,
                             xp: type.xp + currentStage * 5,
+                            level: 1 + Math.floor(currentStage/2), 
+                            nextLevelXp: 50,
                             id: Math.random(),
                             status: null
                         });
@@ -828,6 +850,10 @@
 
         // Event listener for restart
         document.getElementById('restart-btn').addEventListener('click', restartGame);
+        document.getElementById('restart-btn').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            restartGame();
+        });
 
         // --- Game Loop ---
         let lastTime = 0;
@@ -909,9 +935,12 @@
                 const dist = Math.sqrt((player.x - coffeeMachineLoc.x)**2 + (player.y - coffeeMachineLoc.y)**2);
                 if (dist < 60) {
                     player.hp = player.maxHp;
-                    player.status = null; 
+                    player.status = null;
+                    // Heal consultants too
+                    player.consultants.forEach(c => c.hp = c.maxHp);
+                    
                     floatingTexts.push({
-                        text: "Coffee Break! HP Maxed!",
+                        text: "Coffee Break! Team HP Maxed!",
                         x: player.x,
                         y: player.y - 30,
                         color: '#f1c40f',
@@ -1109,6 +1138,8 @@
                 enemy: enemy,
                 menuSelection: 0,
                 attackSelection: 0,
+                consultantSelection: 0, // Selection index for switch menu
+                fighterIndex: -1, // -1 = Player, 0+ = Consultant
                 phase: 'MENU',
                 log: `You encountered a ${enemy.name}!`,
                 turn: 'PLAYER',
@@ -1133,40 +1164,50 @@
              }
 
              if (battleState.phase === 'MENU') {
-                if (player.status && player.status.type === 'STUN') {
+                const fighter = getActiveFighter();
+                if (fighter.status && fighter.status.type === 'STUN') {
                     if (key === 'Enter' || key === ' ') {
                         battleState.log = "You are Stunned! Turn skipped.";
-                        player.status = null;
+                        fighter.status = null;
                         battleState.phase = 'MESSAGE';
                         battleState.onAck = () => enemyTurn();
                         return;
                     }
                 }
 
-                if (key === 'ArrowUp') battleState.menuSelection = (battleState.menuSelection - 1 + 3) % 3;
-                if (key === 'ArrowDown') battleState.menuSelection = (battleState.menuSelection + 1) % 3;
+                if (key === 'ArrowUp') battleState.menuSelection = (battleState.menuSelection - 1 + 4) % 4; // Increased to 4 options
+                if (key === 'ArrowDown') battleState.menuSelection = (battleState.menuSelection + 1) % 4;
                 if (key === 'Enter' || key === ' ') {
-                    if (battleState.menuSelection === 0) {
+                    if (battleState.menuSelection === 0) { // FIGHT
                         battleState.phase = 'ATTACK_SELECT';
                         battleState.attackSelection = 0;
                         battleState.log = "Select Action:";
-                    } else if (battleState.menuSelection === 1) attemptCatch();
-                    else if (battleState.menuSelection === 2) {
+                    } else if (battleState.menuSelection === 1) { // HIRE
+                        attemptCatch();
+                    } else if (battleState.menuSelection === 2) { // SWITCH
+                        if (player.consultants.length > 0) {
+                            battleState.phase = 'SWITCH_SELECT';
+                            battleState.consultantSelection = 0;
+                            battleState.log = "Select Consultant:";
+                        } else {
+                            battleState.log = "No consultants hired!";
+                            battleState.phase = 'MESSAGE';
+                            battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
+                        }
+                    } else if (battleState.menuSelection === 3) { // RUN
                         if (Math.random() < 0.5) {
                             battleState.log = "Ran away safely!";
-                            
+                            // Safe run logic
                             const enemy = battleState.enemy;
                             let dx = player.x - enemy.x;
                             let dy = player.y - enemy.y;
                             let dist = Math.sqrt(dx*dx + dy*dy);
-                            
                             if (dist > 0) {
                                 const stepDist = 60;
                                 const moveX = (dx / dist) * stepDist;
                                 const moveY = (dy / dist) * stepDist;
                                 const newX = player.x + moveX;
                                 const newY = player.y + moveY;
-                                
                                 if (!checkCollision(newX, newY)) {
                                     player.x = newX;
                                     player.y = newY;
@@ -1189,7 +1230,37 @@
             } else if (battleState.phase === 'ATTACK_SELECT') {
                 if (key === 'ArrowUp') battleState.attackSelection = (battleState.attackSelection - 1 + 4) % 4;
                 if (key === 'ArrowDown') battleState.attackSelection = (battleState.attackSelection + 1) % 4;
-                if (key === 'Enter' || key === ' ') performAttack(PLAYER_ATTACKS[battleState.attackSelection]);
+                if (key === 'Enter' || key === ' ') {
+                     // Use Consultant Moves if consultant is active, else Player moves
+                    let moves = PLAYER_ATTACKS;
+                    if (battleState.fighterIndex !== -1) {
+                        moves = ENEMY_MOVES["Consultant"]; 
+                    }
+                    performAttack(moves[battleState.attackSelection]);
+                }
+            } else if (battleState.phase === 'SWITCH_SELECT') {
+                const count = player.consultants.length + 1; // +1 for Player
+                if (key === 'ArrowUp') battleState.consultantSelection = (battleState.consultantSelection - 1 + count) % count;
+                if (key === 'ArrowDown') battleState.consultantSelection = (battleState.consultantSelection + 1) % count;
+                if (key === 'Enter' || key === ' ') {
+                    let targetIndex = battleState.consultantSelection - 1; // 0->-1, 1->0 etc.
+                    let targetFighter = (targetIndex === -1) ? player : player.consultants[targetIndex];
+                    
+                    if (targetFighter.hp <= 0) {
+                        battleState.log = `${targetFighter.name} is exhausted!`;
+                        battleState.phase = 'MESSAGE';
+                        battleState.onAck = () => { battleState.phase = 'SWITCH_SELECT'; };
+                    } else if (targetIndex === battleState.fighterIndex) {
+                         battleState.log = "Already selected!";
+                         battleState.phase = 'MESSAGE';
+                         battleState.onAck = () => { battleState.phase = 'SWITCH_SELECT'; };
+                    } else {
+                        battleState.fighterIndex = targetIndex;
+                        battleState.log = `Go, ${targetFighter.name}!`;
+                        battleState.phase = 'MESSAGE';
+                        battleState.onAck = () => enemyTurn();
+                    }
+                }
             } else if (battleState.phase === 'END' || battleState.phase === 'LEVEL_UP') {
                  if (key === 'Enter' || key === ' ') {
                      if (battleState.enemy.hp <= 0 || battleState.phase === 'LEVEL_UP') {
@@ -1205,17 +1276,30 @@
         }
 
         function performAttack(attack) {
-            if (player.status && player.status.type === 'NAUSEA') {
-                player.hp -= 2;
-                if (player.hp <= 0) { player.hp = 0; currentState = STATE_GAME_OVER; return; }
+            const fighter = getActiveFighter();
+            
+            if (fighter.status && fighter.status.type === 'NAUSEA') {
+                fighter.hp -= 2;
+                if (fighter.hp <= 0) { 
+                    fighter.hp = 0; 
+                    if (fighter === player) { currentState = STATE_GAME_OVER; return; }
+                    else {
+                        battleState.log = `${fighter.name} collapsed!`;
+                        battleState.fighterIndex = -1; // Force swap to player
+                        battleState.phase = 'MESSAGE';
+                        battleState.onAck = () => { battleState.phase = 'MENU'; };
+                        return;
+                    }
+                }
             }
 
             if (attack.isItem) {
+                // Item logic only for player inventory
                 if (player.inventory.donuts > 0) {
                     player.inventory.donuts--;
-                    player.hp = Math.min(player.maxHp, player.hp + 10);
-                    player.status = null;
-                    battleState.log = "Ate Donut! +10 HP.";
+                    fighter.hp = Math.min(fighter.maxHp, fighter.hp + 10);
+                    fighter.status = null;
+                    battleState.log = `Ate Donut! +10 Sanity.`;
                 } else {
                     battleState.log = "No Donuts left!";
                 }
@@ -1224,9 +1308,11 @@
                 return;
             }
 
-            let multiplier = getTypeEffectiveness(player.dept, battleState.enemy.dept);
-            let damage = Math.floor(attack.damage * multiplier + player.level / 2);
-            if (player.consultants > 0) damage += player.consultants;
+            let multiplier = getTypeEffectiveness(fighter.dept || FACT_NEUTRAL, battleState.enemy.dept);
+            let damage = Math.floor(attack.damage * multiplier + fighter.level / 2);
+            
+            // Player specific bonus
+            if (fighter === player && player.consultants.length > 0) damage += 1; // Small bonus for leadership
 
             if (attack.effect && Math.random() < attack.chance) {
                 battleState.enemy.status = { type: attack.effect };
@@ -1250,9 +1336,29 @@
         }
 
         function attemptCatch() {
-            if (battleState.enemy.name === "Consultant") {
+            if (player.consultants.length >= 3) {
+                battleState.log = "Team full (Max 3)!";
+                battleState.phase = 'MESSAGE';
+                battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
+                return;
+            }
+
+            if (battleState.enemy.type === "Consultant") {
                 if (Math.random() < 0.6) {
-                    player.consultants++;
+                    // Create new consultant object
+                    const newCon = {
+                        name: "Consultant",
+                        type: "Consultant",
+                        dept: FACT_POLITICIAN, // Consultants are Politician faction
+                        level: battleState.enemy.level || 1,
+                        hp: battleState.enemy.hp, // Hire with current HP
+                        maxHp: battleState.enemy.maxHp,
+                        xp: 0,
+                        nextLevelXp: 50,
+                        status: null
+                    };
+                    player.consultants.push(newCon);
+                    
                     battleState.log = "Hired Consultant!";
                     battleState.phase = 'MESSAGE';
                     battleState.onAck = () => { 
@@ -1275,7 +1381,8 @@
 
         function enemyTurn() {
             if (currentState !== STATE_BATTLE) return;
-            
+            const fighter = getActiveFighter();
+
             if (battleState.enemy.status) {
                 if (battleState.enemy.status.type === 'STUN') {
                     battleState.log = "Enemy is Stunned!";
@@ -1302,29 +1409,38 @@
             const move = moves[Math.floor(Math.random() * moves.length)];
             
             const levelScale = 1 + (player.level * 0.1);
-            let multiplier = getTypeEffectiveness(move.type || FACT_NEUTRAL, player.dept);
+            // Defending type is active fighter type
+            let multiplier = getTypeEffectiveness(move.type || FACT_NEUTRAL, fighter.dept || FACT_OFFICER);
             let damage = Math.floor(move.damage * levelScale * multiplier);
             damage = Math.floor(damage * (0.8 + Math.random() * 0.4));
             if (damage < 1) damage = 1;
 
             if (move.effect && Math.random() < move.chance) {
-                player.status = { type: move.effect };
-                battleState.log = `${battleState.enemy.name} used ${move.name}! You are ${move.effect}!`;
+                fighter.status = { type: move.effect };
+                battleState.log = `${battleState.enemy.name} used ${move.name}! ${fighter.name} ${move.effect}!`;
             } else {
                 let effText = multiplier > 1 ? " (Ouch!)" : (multiplier < 1 ? " (Resisted)" : "");
-                battleState.log = `${battleState.enemy.name} used ${move.name}! -${damage} HP${effText}`;
+                battleState.log = `${battleState.enemy.name} used ${move.name}! -${damage} Sanity${effText}`;
             }
 
-            player.hp -= damage;
+            fighter.hp -= damage;
             shakeAmount = 20;
 
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
-                if (player.hp <= 0) {
-                    player.hp = 0;
-                    currentState = STATE_GAME_OVER;
-                    document.getElementById('final-score').innerText = `Score: ${player.score}`;
-                    document.getElementById('game-over-modal').classList.remove('hidden');
+                if (fighter.hp <= 0) {
+                    fighter.hp = 0;
+                    if (fighter === player) {
+                        currentState = STATE_GAME_OVER;
+                        document.getElementById('final-score').innerText = `Score: ${player.score}`;
+                        document.getElementById('game-over-modal').classList.remove('hidden');
+                    } else {
+                        // Consultant defeated
+                        battleState.log = `${fighter.name} retreated!`;
+                        battleState.fighterIndex = -1; // Auto switch to player
+                        battleState.phase = 'MESSAGE';
+                        battleState.onAck = () => { battleState.phase = 'MENU'; };
+                    }
                 } else {
                     battleState.phase = 'MENU';
                     battleState.log = "Action?";
@@ -1333,8 +1449,9 @@
         }
 
         function winBattle() {
+            const fighter = getActiveFighter();
             const xpGain = battleState.enemy.xp;
-            player.xp += xpGain;
+            fighter.xp += xpGain;
             const scoreGain = battleState.enemy.maxHp * 10;
             player.score += scoreGain;
             
@@ -1344,10 +1461,10 @@
                 sigText = " Found Signature!";
             }
 
-            battleState.log = `Win! +${xpGain} XP. +${scoreGain} Pts.${sigText}`;
+            battleState.log = `Win! +${xpGain} XP for ${fighter.name}. +${scoreGain} Pts.${sigText}`;
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
-                if (player.xp >= player.nextLevelXp) levelUp();
+                if (fighter.xp >= fighter.nextLevelXp) levelUp();
                 else {
                     if (currentEnemyIndex > -1) enemies.splice(currentEnemyIndex, 1);
                     currentState = STATE_WORLD;
@@ -1358,12 +1475,13 @@
         }
 
         function levelUp() {
-            player.level++;
-            player.xp -= player.nextLevelXp;
-            player.nextLevelXp = Math.floor(player.nextLevelXp * 1.5);
-            player.maxHp += 5;
-            player.hp = player.maxHp;
-            battleState.log = `Promoted to ${getTitle(player.level)}!`;
+            const fighter = getActiveFighter();
+            fighter.level++;
+            fighter.xp -= fighter.nextLevelXp;
+            fighter.nextLevelXp = Math.floor(fighter.nextLevelXp * 1.5);
+            fighter.maxHp += 5;
+            fighter.hp = fighter.maxHp;
+            battleState.log = `${fighter.name} leveled up to ${fighter.level}!`;
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
                 if (currentEnemyIndex > -1) enemies.splice(currentEnemyIndex, 1);
@@ -1380,7 +1498,7 @@
             player.xp = 0;
             player.nextLevelXp = 50;
             player.score = 0;
-            player.consultants = 0;
+            player.consultants = [];
             player.status = null;
             player.inventory.donuts = 1;
             currentStage = 1;
@@ -1425,14 +1543,18 @@
             ctx.roundRect(450, 110, 200 * (enemy.hp / enemy.maxHp), 15, 5);
             ctx.fill();
 
-            drawCharacter(ctx, 150, 200, player.type, 4, true, 0, player.status);
+            const fighter = getActiveFighter();
+            const fName = fighter === player ? "Officer" : "Consultant";
+            const fType = fighter === player ? player.type : fighter.type;
+
+            drawCharacter(ctx, 150, 200, fType, 4, true, 0, fighter.status);
 
             ctx.fillStyle = 'white';
             ctx.font = 'bold 24px Courier New';
-            ctx.fillText(`${getTitle(player.level)}`, 100, 230);
+            ctx.fillText(`${fighter.name}`, 100, 230);
             ctx.font = '16px Courier New';
             ctx.fillStyle = '#aaa';
-            ctx.fillText(`Faction: ${player.dept}`, 100, 250); 
+            ctx.fillText(`Faction: ${fighter.dept || FACT_OFFICER}`, 100, 250); 
             
             ctx.fillStyle = '#555';
             ctx.beginPath();
@@ -1440,12 +1562,12 @@
             ctx.fill();
             ctx.fillStyle = '#2ecc71';
             ctx.beginPath();
-            ctx.roundRect(100, 260, 200 * (player.hp / player.maxHp), 15, 5);
+            ctx.roundRect(100, 260, 200 * (fighter.hp / fighter.maxHp), 15, 5);
             ctx.fill();
             
             ctx.fillStyle = 'white';
             ctx.font = '16px Courier New';
-            ctx.fillText(`${player.hp} / ${player.maxHp} HP`, 100, 295);
+            ctx.fillText(`${fighter.hp} / ${fighter.maxHp} HP`, 100, 295);
 
             ctx.fillStyle = COLOR_MENU_BG;
             ctx.fillRect(0, 400, SCREEN_WIDTH, 200);
@@ -1465,7 +1587,7 @@
                  ctx.font = 'bold 20px Courier New';
                  ctx.fillText("[Press A to continue]", 500, 560);
             } else if (battleState.phase === 'MENU') {
-                const options = ["FIGHT", "HIRE", "RUN"];
+                const options = ["FIGHT", "HIRE", "SWITCH", "RUN"];
                 options.forEach((opt, index) => {
                     if (index === battleState.menuSelection) {
                         ctx.fillStyle = '#f1c40f';
@@ -1476,11 +1598,31 @@
                     }
                 });
             } else if (battleState.phase === 'ATTACK_SELECT') {
-                PLAYER_ATTACKS.forEach((att, index) => {
+                // If Consultant, use generic moves
+                let moves = PLAYER_ATTACKS;
+                if (fighter !== player) moves = ENEMY_MOVES["Consultant"];
+
+                moves.forEach((att, index) => {
                     let label = att.name;
                     if (att.isItem) label = `Eat Donut (${player.inventory.donuts})`;
                     
                     if (index === battleState.attackSelection) {
+                         ctx.fillStyle = '#f1c40f';
+                        ctx.fillText(`> ${label}`, startX, startY + index * 30 - 20);
+                    } else {
+                         ctx.fillStyle = 'white';
+                        ctx.fillText(`  ${label}`, startX, startY + index * 30 - 20);
+                    }
+                });
+            } else if (battleState.phase === 'SWITCH_SELECT') {
+                // List Player + Consultants
+                const roster = [player, ...player.consultants];
+                roster.forEach((char, index) => {
+                    let label = char.name;
+                    if (char === player) label = "Officer (You)";
+                    label += ` HP:${char.hp}`;
+                    
+                    if (index === battleState.consultantSelection) {
                          ctx.fillStyle = '#f1c40f';
                         ctx.fillText(`> ${label}`, startX, startY + index * 30 - 20);
                     } else {
