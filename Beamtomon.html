@@ -53,7 +53,7 @@
             left: 40px;
             width: 150px;
             height: 150px;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 50%;
             pointer-events: auto;
             touch-action: none;
@@ -61,7 +61,7 @@
         }
         
         .joystick-area:active {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
         }
 
         .joystick-knob {
@@ -70,11 +70,11 @@
             left: 50%;
             width: 50px;
             height: 50px;
-            background: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.25);
             border-radius: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
 
         .actions {
@@ -89,8 +89,8 @@
         .action-btn {
             position: absolute;
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.25);
             width: 70px;
             height: 70px;
             display: flex;
@@ -101,22 +101,91 @@
             font-size: 24px;
             touch-action: manipulation;
             transition: transform 0.1s;
-            text-shadow: 0 2px 2px rgba(0,0,0,0.5);
+            text-shadow: 0 2px 2px rgba(0,0,0,0.25);
         }
 
         .action-btn:active, .action-btn.active {
-             background: rgba(255, 255, 255, 0.5);
+             background: rgba(255, 255, 255, 0.25);
              transform: scale(0.95);
         }
 
-        .btn-a { bottom: 20px; right: 0px; background-color: rgba(0, 255, 0, 0.3); }
-        .btn-b { bottom: 0px; right: 90px; background-color: rgba(255, 0, 0, 0.3); }
+        .btn-a { bottom: 20px; right: 0px; background-color: rgba(0, 255, 0, 0.15); }
+        .btn-b { bottom: 0px; right: 90px; background-color: rgba(255, 0, 0, 0.15); }
+
+        /* Game Over Modal */
+        #game-over-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .modal-content {
+            background: #2c3e50;
+            padding: 40px;
+            border: 4px solid #fff;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .modal-title {
+            font-size: 48px;
+            color: #e74c3c;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 0px #000;
+        }
+
+        .modal-score {
+            font-size: 24px;
+            margin-bottom: 30px;
+            color: #f1c40f;
+        }
+
+        .restart-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 24px;
+            font-family: 'Courier New', Courier, monospace;
+            cursor: pointer;
+            border-radius: 5px;
+            border-bottom: 4px solid #1e8449;
+            transition: transform 0.1s;
+        }
+
+        .restart-btn:active {
+            transform: translateY(2px);
+            border-bottom: 2px solid #1e8449;
+        }
 
     </style>
 </head>
 <body>
     <div id="game-container">
         <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div id="game-over-modal" class="hidden">
+            <div class="modal-content">
+                <div class="modal-title">Burnout!</div>
+                <div class="modal-score" id="final-score">Score: 0</div>
+                <button class="restart-btn" onclick="restartGame()">Back to Work</button>
+            </div>
+        </div>
+
         <div class="controls-container">
             <div class="joystick-area" id="joystick">
                 <div class="joystick-knob" id="joystick-knob"></div>
@@ -149,6 +218,8 @@
         const OBJ_CHAIR = 2;
         const OBJ_PLANT = 3;
         const OBJ_PRINTER = 4;
+        const OBJ_COFFEE_MACHINE = 5;
+        const OBJ_EXIT_DOOR = 6; // NEW: The Exit
 
         // Colors
         const COLOR_FLOOR = '#e0e0e0';
@@ -159,14 +230,28 @@
         // Game State
         const STATE_WORLD = 'WORLD';
         const STATE_BATTLE = 'BATTLE';
+        const STATE_GAME_OVER = 'GAME_OVER';
         let currentState = STATE_WORLD;
         let shakeAmount = 0;
-        let battleCooldown = 0; // Cooldown after running away
+        let battleCooldown = 0; 
+        
+        // Progression
+        let currentStage = 1;
+        let mapSeedVal = 100; // Base seed
+
+        // Pseudo Random Number Generator for Deterministic Maps
+        function prng() {
+            var x = Math.sin(mapSeedVal++) * 10000;
+            return x - Math.floor(x);
+        }
 
         // Input
         const keys = {};
         let joystickVector = { x: 0, y: 0 };
         let joystickTimer = 0;
+
+        // Visual Effects
+        const floatingTexts = [];
 
         // Player Object
         const player = {
@@ -182,9 +267,14 @@
             maxHp: 20,
             xp: 0,
             nextLevelXp: 50,
+            score: 0,
             consultants: 0,
             animFrame: 0
         };
+
+        // Trackers
+        let coffeeMachineLoc = { x: 0, y: 0 };
+        let exitDoorLoc = { x: 0, y: 0 };
 
         // Data
         const TITLES = ["Anwärter", "Inspektor", "Oberinspektor", "Amtmann", "Amtsrat"];
@@ -353,6 +443,7 @@
         }
 
         function drawObject(ctx, x, y, type) {
+            // Shadow common to all
             ctx.fillStyle = 'rgba(0,0,0,0.1)';
             ctx.fillRect(x + 2, y + TILE_SIZE - 5, TILE_SIZE - 4, 4);
 
@@ -375,13 +466,51 @@
                 ctx.fillStyle = '#7f8c8d'; ctx.fillRect(x + 5, y + 10, 30, 5);
                 ctx.fillStyle = 'white'; ctx.beginPath(); ctx.moveTo(x + 10, y + 10); ctx.lineTo(x + 15, y + 5); ctx.lineTo(x + 25, y + 5); ctx.lineTo(x + 30, y + 10); ctx.fill();
                 ctx.fillStyle = '#2ecc71'; ctx.fillRect(x + 28, y + 12, 3, 3);
+            } else if (type === OBJ_COFFEE_MACHINE) {
+                ctx.fillStyle = '#555'; ctx.fillRect(x+5, y+20, 30, 15);
+                ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x+10, y+5, 20, 25);
+                ctx.fillStyle = '#000'; ctx.fillRect(x+9, y+5, 22, 5);
+                ctx.fillStyle = '#444'; ctx.fillRect(x+12, y+15, 16, 12);
+                ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(x+14, y+17, 12, 10);
+                ctx.fillStyle = '#3e2723'; ctx.fillRect(x+15, y+20, 10, 7);
+                ctx.fillStyle = 'red'; ctx.fillRect(x+25, y+8, 2, 2);
+            } else if (type === OBJ_EXIT_DOOR) {
+                // Determine if locked or unlocked
+                const locked = enemies.length > 0;
+                ctx.fillStyle = locked ? '#c0392b' : '#2ecc71'; // Red if locked, Green if open
+                ctx.fillRect(x + 5, y + 5, 30, 35);
+                
+                // Door Frame
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#fff';
+                ctx.strokeRect(x + 5, y + 5, 30, 35);
+                
+                // Knob
+                ctx.fillStyle = '#f1c40f';
+                ctx.beginPath();
+                ctx.arc(x + 28, y + 25, 3, 0, Math.PI*2);
+                ctx.fill();
+                
+                // Lock Icon or Arrow
+                ctx.fillStyle = '#fff';
+                if (locked) {
+                    // X
+                    ctx.font = "bold 14px Arial";
+                    ctx.fillText("X", x+15, y+20);
+                } else {
+                    // Arrow Up
+                    ctx.font = "bold 14px Arial";
+                    ctx.fillText("↑", x+15, y+20);
+                }
             }
         }
 
         // --- Maze & Map Generation ---
         
         function initMap() {
-            // 1. Initialize with walls
+            // Reset seed for this stage
+            mapSeedVal = 100 + currentStage * 997; // Deterministic seed based on stage
+
             worldMap.length = 0;
             objectMap.length = 0;
             enemies.length = 0;
@@ -393,8 +522,6 @@
                 objectMap.push(objRow);
             }
 
-            // 2. Generate Maze (Recursive Backtracker)
-            // We use odd coordinates for cells to ensure walls between them
             const stack = [];
             const startR = 1;
             const startC = 1;
@@ -402,11 +529,13 @@
             worldMap[startR][startC] = TILE_FLOOR;
             stack.push({r: startR, c: startC});
 
+            // For tracking distance to exit
+            let floorTiles = [];
+
             while (stack.length > 0) {
                 const current = stack[stack.length - 1];
                 const neighbors = [];
 
-                // Check neighbors 2 steps away
                 const directions = [
                     {dr: -2, dc: 0}, // Up
                     {dr: 2, dc: 0},  // Down
@@ -418,7 +547,6 @@
                     const nr = current.r + d.dr;
                     const nc = current.c + d.dc;
 
-                    // Bounds check (keep 1 tile border)
                     if (nr > 0 && nr < MAP_ROWS - 1 && nc > 0 && nc < MAP_COLS - 1) {
                         if (worldMap[nr][nc] === TILE_WALL) {
                             neighbors.push({r: nr, c: nc, linkR: current.r + d.dr/2, linkC: current.c + d.dc/2});
@@ -427,39 +555,36 @@
                 }
 
                 if (neighbors.length > 0) {
-                    const next = neighbors[Math.floor(Math.random() * neighbors.length)];
-                    // Carve path
+                    // Use PRNG for maze layout
+                    const next = neighbors[Math.floor(prng() * neighbors.length)];
                     worldMap[next.linkR][next.linkC] = TILE_FLOOR;
                     worldMap[next.r][next.c] = TILE_FLOOR;
+                    floorTiles.push({r: next.r, c: next.c}); // Track floor
                     stack.push({r: next.r, c: next.c});
                 } else {
                     stack.pop();
                 }
             }
 
-            // 3. Mark Original Paths (The Golden Path)
-            // We will NEVER place solid objects on these tiles
+            // Mark Original Paths
             const isPath = worldMap.map(row => [...row]);
 
-            // 4. Carve "Office Rooms" (Open spaces)
             const numRooms = 5;
             for (let i = 0; i < numRooms; i++) {
-                const w = Math.floor(Math.random() * 3) + 3; // Width 3-5
-                const h = Math.floor(Math.random() * 3) + 3; // Height 3-5
-                const r = Math.floor(Math.random() * (MAP_ROWS - h - 2)) + 1;
-                const c = Math.floor(Math.random() * (MAP_COLS - w - 2)) + 1;
+                // Use PRNG for rooms
+                const w = Math.floor(prng() * 3) + 3;
+                const h = Math.floor(prng() * 3) + 3;
+                const r = Math.floor(prng() * (MAP_ROWS - h - 2)) + 1;
+                const c = Math.floor(prng() * (MAP_COLS - w - 2)) + 1;
 
                 for (let rr = r; rr < r + h; rr++) {
                     for (let cc = c; cc < c + w; cc++) {
-                        // Keep track of what it was before we touch it
                         const wasWall = worldMap[rr][cc] === TILE_WALL;
-                        
                         worldMap[rr][cc] = TILE_FLOOR;
                         
-                        // Smart Object Placement
                         if (wasWall) {
-                             if (Math.random() < 0.4) {
-                                const roll = Math.random();
+                             if (prng() < 0.4) {
+                                const roll = prng();
                                 if (roll < 0.4) objectMap[rr][cc] = OBJ_DESK;
                                 else if (roll < 0.6) objectMap[rr][cc] = OBJ_CHAIR;
                                 else if (roll < 0.8) objectMap[rr][cc] = OBJ_PLANT;
@@ -474,15 +599,36 @@
                 }
             }
 
-            // 5. Ensure Player Spawn is valid
-            // Find first floor tile
+            // Place Exit Door (Furthest point roughly)
+            if (floorTiles.length > 0) {
+                // Pick a tile far from start (simple approx using end of array or random from end)
+                // Since it's DFS, end of array is usually deep in maze
+                let exitNode = floorTiles[floorTiles.length - 1]; 
+                // Ensure it is empty
+                objectMap[exitNode.r][exitNode.c] = OBJ_EXIT_DOOR;
+                exitDoorLoc = { r: exitNode.r, c: exitNode.c };
+            }
+
+            // Place Coffee Machine
+            let coffeePlaced = false;
+            let coffeeAttempts = 0;
+            while (!coffeePlaced && coffeeAttempts < 500) {
+                const r = Math.floor(prng() * (MAP_ROWS - 2)) + 1;
+                const c = Math.floor(prng() * (MAP_COLS - 2)) + 1;
+                if (worldMap[r][c] === TILE_FLOOR && objectMap[r][c] === OBJ_NONE) {
+                    objectMap[r][c] = OBJ_COFFEE_MACHINE;
+                    coffeeMachineLoc = { x: c * TILE_SIZE + TILE_SIZE/2, y: r * TILE_SIZE + TILE_SIZE/2 };
+                    coffeePlaced = true;
+                }
+                coffeeAttempts++;
+            }
+
             let spawnFound = false;
             for(let r=1; r<MAP_ROWS; r++) {
                 for(let c=1; c<MAP_COLS; c++) {
                     if(worldMap[r][c] === TILE_FLOOR && objectMap[r][c] === OBJ_NONE) {
                         player.x = c * TILE_SIZE + 5;
                         player.y = r * TILE_SIZE + 5;
-                        // Clear spawn area
                         objectMap[r][c] = OBJ_NONE;
                         if (c+1 < MAP_COLS) objectMap[r][c+1] = OBJ_NONE;
                         spawnFound = true;
@@ -492,8 +638,9 @@
                 if(spawnFound) break;
             }
 
-            // 6. Spawn Enemies
-            for (let i = 0; i < 10; i++) {
+            // Spawn Enemies (Scale count with stage)
+            const enemyCount = 8 + currentStage * 2;
+            for (let i = 0; i < enemyCount; i++) {
                 spawnEnemy();
             }
         }
@@ -502,8 +649,8 @@
             let placed = false;
             let attempts = 0;
             while (!placed && attempts < 100) {
-                const r = Math.floor(Math.random() * (MAP_ROWS - 2)) + 1;
-                const c = Math.floor(Math.random() * (MAP_COLS - 2)) + 1;
+                const r = Math.floor(prng() * (MAP_ROWS - 2)) + 1;
+                const c = Math.floor(prng() * (MAP_COLS - 2)) + 1;
                 const x = c * TILE_SIZE + 5;
                 const y = r * TILE_SIZE + 5;
                 attempts++;
@@ -512,7 +659,7 @@
                     const dx = x - player.x;
                     const dy = y - player.y;
                     if (dx*dx + dy*dy > 10000) {
-                        const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
+                        const type = ENEMY_TYPES[Math.floor(prng() * ENEMY_TYPES.length)];
                         enemies.push({
                             ...type,
                             type: type.name === "Consultant" ? "Consultant" : 
@@ -520,8 +667,10 @@
                                   type.name === "Citizen" ? "Citizen" : "Colleague",
                             x: x,
                             y: y,
-                            maxHp: type.hp,
-                            id: Math.random()
+                            maxHp: type.hp + currentStage * 2, // Harder enemies
+                            hp: type.hp + currentStage * 2,
+                            xp: type.xp + currentStage * 5,
+                            id: Math.random() // Unique ID
                         });
                         placed = true;
                     }
@@ -534,13 +683,14 @@
         // --- Input Handling ---
 
         window.addEventListener('keydown', (e) => {
+            if (currentState === STATE_GAME_OVER) return;
             if (keys[e.key]) return;
             keys[e.key] = true;
             if (currentState === STATE_BATTLE) handleBattleInput(e.key);
+            else if (currentState === STATE_WORLD) handleWorldInput(e.key);
         });
         window.addEventListener('keyup', (e) => keys[e.key] = false);
 
-        // Joystick
         const joystick = document.getElementById('joystick');
         const knob = document.getElementById('joystick-knob');
         let joystickActive = false;
@@ -548,6 +698,7 @@
         const maxRadius = 50;
 
         function handleStart(e) {
+            if (currentState === STATE_GAME_OVER) return;
             e.preventDefault();
             joystickActive = true;
             const rect = joystick.getBoundingClientRect();
@@ -577,7 +728,6 @@
 
             knob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
 
-            // Normalize vector
             joystickVector.x = knobX / maxRadius;
             joystickVector.y = knobY / maxRadius;
         }
@@ -596,11 +746,12 @@
         window.addEventListener('mouseup', handleEnd);
         window.addEventListener('touchend', handleEnd);
 
-        // Buttons
         document.querySelectorAll('.action-btn').forEach(btn => {
              const key = btn.getAttribute('data-key');
              const trigger = () => {
+                 if (currentState === STATE_GAME_OVER) return;
                  if (currentState === STATE_BATTLE) handleBattleInput(key);
+                 else if (currentState === STATE_WORLD) handleWorldInput(key);
                  keys[key] = true;
                  setTimeout(() => keys[key] = false, 100);
              };
@@ -613,8 +764,10 @@
         function gameLoop(timestamp) {
             const deltaTime = (timestamp - lastTime) / 1000;
             lastTime = timestamp;
-            update(deltaTime);
-            draw();
+            if (currentState !== STATE_GAME_OVER) {
+                update(deltaTime);
+                draw();
+            }
             requestAnimationFrame(gameLoop);
         }
 
@@ -622,6 +775,13 @@
             if (currentState === STATE_WORLD) updateWorld(dt);
             else if (currentState === STATE_BATTLE) updateBattleJoystick(dt);
             
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const txt = floatingTexts[i];
+                txt.time -= dt;
+                txt.y -= 20 * dt; 
+                if (txt.time <= 0) floatingTexts.splice(i, 1);
+            }
+
             if (shakeAmount > 0) {
                 shakeAmount -= dt * 30;
                 if (shakeAmount < 0) shakeAmount = 0;
@@ -671,6 +831,22 @@
             }
         }
 
+        function handleWorldInput(key) {
+            if (key === 'Enter' || key === ' ') {
+                const dist = Math.sqrt((player.x - coffeeMachineLoc.x)**2 + (player.y - coffeeMachineLoc.y)**2);
+                if (dist < 60) {
+                    player.hp = player.maxHp;
+                    floatingTexts.push({
+                        text: "Coffee Break! HP Maxed!",
+                        x: player.x,
+                        y: player.y - 30,
+                        color: '#f1c40f',
+                        time: 1.5
+                    });
+                }
+            }
+        }
+
         function updateWorld(dt) {
             let dx = joystickVector.x;
             let dy = joystickVector.y;
@@ -687,6 +863,28 @@
                 const nextX = player.x + dx * player.speed * dt;
                 const nextY = player.y + dy * player.speed * dt;
 
+                // Check Exit Door Logic
+                const c = Math.floor((nextX + 15) / TILE_SIZE);
+                const r = Math.floor((nextY + 15) / TILE_SIZE);
+                
+                if (objectMap[r] && objectMap[r][c] === OBJ_EXIT_DOOR) {
+                    // Check if enemies are cleared
+                    if (enemies.length === 0) {
+                        nextStage();
+                        return; // Stop update to prevent glitching into door
+                    } else {
+                        // Locked
+                        floatingTexts.push({
+                            text: "Locked! Defeat Enemies!",
+                            x: player.x,
+                            y: player.y - 30,
+                            color: '#e74c3c',
+                            time: 0.1 // Short so it doesn't stack too much
+                        });
+                        return; // Treat as wall
+                    }
+                }
+
                 if (!checkCollision(nextX, player.y)) player.x = nextX;
                 if (!checkCollision(player.x, nextY)) player.y = nextY;
             }
@@ -699,6 +897,18 @@
                     break;
                 }
             }
+        }
+
+        function nextStage() {
+            currentStage++;
+            floatingTexts.push({
+                text: "STAGE CLEAR!",
+                x: SCREEN_WIDTH/2,
+                y: SCREEN_HEIGHT/2,
+                color: '#2ecc71',
+                time: 3.0
+            });
+            initMap();
         }
 
         function checkCollision(x, y) {
@@ -715,9 +925,9 @@
 
                 if (c < 0 || c >= MAP_COLS || r < 0 || r >= MAP_ROWS) return true;
                 if (worldMap[r][c] === TILE_WALL) return true;
-                // Only collide with objects if they are solid?
-                // For simplicity, yes, objects are solid.
-                if (objectMap[r][c] !== OBJ_NONE) return true;
+                // Objects are solid (except Coffee machine which you can walk on/near to interact usually, but here we treat solid)
+                // Treat Exit door specially (handled in updateWorld)
+                if (objectMap[r][c] !== OBJ_NONE && objectMap[r][c] !== OBJ_EXIT_DOOR) return true;
             }
             return false;
         }
@@ -764,35 +974,50 @@
 
             drawCharacter(ctx, player.x, player.y, player.type, 1, false);
             
+            // HUD
             ctx.textAlign = 'left';
             ctx.fillStyle = 'rgba(0,0,0,0.8)';
-            ctx.fillRect(10, 10, 280, 70);
+            ctx.fillRect(10, 10, 280, 105); // Taller for Stage Info
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2;
-            ctx.strokeRect(10, 10, 280, 70);
+            ctx.strokeRect(10, 10, 280, 105);
             
             ctx.fillStyle = '#fff';
             ctx.font = '16px Courier New';
             ctx.fillText(`${getTitle(player.level)} (Lvl ${player.level})`, 20, 35);
-            
+            ctx.fillStyle = '#FFD700'; 
+            ctx.fillText(`Score: ${player.score}`, 20, 50); 
+            ctx.fillStyle = '#fff';
+            ctx.fillText(`Stage: ${currentStage} | Enemies: ${enemies.length}`, 20, 65);
+
             ctx.fillStyle = '#e74c3c';
-            ctx.fillRect(20, 45, 100, 8);
+            ctx.fillRect(20, 80, 100, 8);
             ctx.fillStyle = '#2ecc71';
-            ctx.fillRect(20, 45, 100 * (player.hp / player.maxHp), 8);
+            ctx.fillRect(20, 80, 100 * (player.hp / player.maxHp), 8);
             
             ctx.fillStyle = '#7f8c8d';
-            ctx.fillRect(130, 45, 100, 8);
+            ctx.fillRect(130, 80, 100, 8);
             ctx.fillStyle = '#3498db';
-            ctx.fillRect(130, 45, 100 * (player.xp / player.nextLevelXp), 8);
+            ctx.fillRect(130, 80, 100 * (player.xp / player.nextLevelXp), 8);
             
             ctx.font = '10px Courier New';
             ctx.fillStyle = '#fff';
-            ctx.fillText(`HP: ${player.hp}/${player.maxHp}`, 20, 65);
-            ctx.fillText(`XP: ${player.xp}/${player.nextLevelXp}`, 130, 65);
+            ctx.fillText(`HP: ${player.hp}/${player.maxHp}`, 20, 100);
+            ctx.fillText(`XP: ${player.xp}/${player.nextLevelXp}`, 130, 100);
+
+            floatingTexts.forEach(txt => {
+                ctx.save();
+                ctx.fillStyle = txt.color;
+                ctx.font = 'bold 16px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText(txt.text, txt.x, txt.y);
+                ctx.restore();
+            });
 
             if (battleCooldown > 0) {
                 ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
                 ctx.font = 'bold 20px Courier New';
+                ctx.textAlign = 'left';
                 ctx.fillText("SAFE!", player.x - 10, player.y - 10);
             }
         }
@@ -809,9 +1034,9 @@
             battleState = {
                 enemy: {
                     ...enemy,
-                    maxHp: Math.floor(enemy.hp * levelScale),
-                    hp: Math.floor(enemy.hp * levelScale),
-                    xp: Math.floor(enemy.xp * levelScale)
+                    maxHp: Math.floor(enemy.hp), // Already scaled in spawn
+                    hp: Math.floor(enemy.hp),
+                    xp: Math.floor(enemy.xp)
                 },
                 menuSelection: 0,
                 attackSelection: 0,
@@ -839,32 +1064,25 @@
                         if (Math.random() < 0.5) {
                             battleState.log = "Ran away safely!";
                             
-                            // Step Back Logic
                             const enemy = battleState.enemy;
-                            // Vector from enemy to player
                             let dx = player.x - enemy.x;
                             let dy = player.y - enemy.y;
                             let dist = Math.sqrt(dx*dx + dy*dy);
                             
                             if (dist > 0) {
-                                // Move 60px away (approx 1.5 tiles)
                                 const stepDist = 60;
                                 const moveX = (dx / dist) * stepDist;
                                 const moveY = (dy / dist) * stepDist;
                                 const newX = player.x + moveX;
                                 const newY = player.y + moveY;
                                 
-                                // Simple boundary check (or wall check)
-                                // We trust checkCollision to prevent wall clipping
                                 if (!checkCollision(newX, newY)) {
                                     player.x = newX;
                                     player.y = newY;
                                 }
                             }
                             
-                            // Add Cooldown so we don't immediately re-fight
                             battleCooldown = 2.0;
-
                             battleState.phase = 'END';
                         } else {
                             battleState.log = "Failed to run!";
@@ -886,7 +1104,6 @@
                      if (battleState.enemy.hp <= 0 || battleState.phase === 'LEVEL_UP') {
                          if (currentEnemyIndex > -1) {
                              enemies.splice(currentEnemyIndex, 1);
-                             spawnEnemy(); 
                          }
                      }
                      currentState = STATE_WORLD;
@@ -957,10 +1174,10 @@
 
             if (player.hp <= 0) {
                 player.hp = 0;
-                battleState.phase = 'END';
-                battleState.log = "Burnout! (Press A)";
-                player.hp = player.maxHp;
-                player.x = 100; player.y = 100; 
+                currentState = STATE_GAME_OVER;
+                document.getElementById('final-score').innerText = `Score: ${player.score}`;
+                document.getElementById('game-over-modal').classList.remove('hidden');
+                battleState.phase = 'GAME_OVER';
             } else {
                 battleState.phase = 'MENU';
             }
@@ -969,7 +1186,9 @@
         function winBattle() {
             const xpGain = battleState.enemy.xp;
             player.xp += xpGain;
-            battleState.log = `Victory! +${xpGain} XP.`;
+            const scoreGain = battleState.enemy.maxHp * 10;
+            player.score += scoreGain;
+            battleState.log = `Win! +${xpGain} XP. +${scoreGain} Pts.`;
             if (player.xp >= player.nextLevelXp) setTimeout(() => levelUp(), 1000);
             else battleState.phase = 'END';
         }
@@ -982,6 +1201,22 @@
             player.hp = player.maxHp;
             battleState.log = `Promoted to ${getTitle(player.level)}!`;
             battleState.phase = 'LEVEL_UP';
+        }
+
+        function restartGame() {
+            player.level = 1;
+            player.hp = 20;
+            player.maxHp = 20;
+            player.xp = 0;
+            player.nextLevelXp = 50;
+            player.score = 0;
+            player.consultants = 0;
+            currentStage = 1;
+
+            document.getElementById('game-over-modal').classList.add('hidden');
+            initMap();
+            currentState = STATE_WORLD;
+            draw();
         }
 
         function drawBattle() {
