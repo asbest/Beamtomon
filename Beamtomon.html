@@ -232,6 +232,14 @@
                 objectMap.push(objRow);
             }
 
+            // Ensure player spawn area is clear
+            const startR = Math.floor(player.y / TILE_SIZE);
+            const startC = Math.floor(player.x / TILE_SIZE);
+            if (objectMap[startR] && objectMap[startR][startC]) objectMap[startR][startC] = OBJ_NONE;
+            if (objectMap[startR] && objectMap[startR][startC+1]) objectMap[startR][startC+1] = OBJ_NONE;
+            if (objectMap[startR+1] && objectMap[startR+1][startC]) objectMap[startR+1][startC] = OBJ_NONE;
+            if (objectMap[startR+1] && objectMap[startR+1][startC+1]) objectMap[startR+1][startC+1] = OBJ_NONE;
+
             // Spawn Enemies
             for (let i = 0; i < 10; i++) {
                 spawnEnemy();
