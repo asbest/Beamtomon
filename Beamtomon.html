@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beamtomon</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #202020;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 1280px;
+            max-height: 720px;
+            /* Keep aspect ratio roughly consistent if desired, or fill screen */
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        /* Virtual Controls */
+        .controls-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .joystick-area {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 150px;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        .joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .actions {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 180px;
+            height: 150px;
+            pointer-events: auto;
+        }
+
+        .action-btn {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            width: 70px;
+            height: 70px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 24px;
+            touch-action: manipulation;
+        }
+
+        .action-btn:active, .action-btn.active {
+             background: rgba(255, 255, 255, 0.5);
+        }
+
+        .btn-a { bottom: 20px; right: 0px; background-color: rgba(0, 255, 0, 0.2); }
+        .btn-b { bottom: 0px; right: 90px; background-color: rgba(255, 0, 0, 0.2); }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="controls-container">
+            <div class="joystick-area" id="joystick">
+                <div class="joystick-knob" id="joystick-knob"></div>
+            </div>
+            <div class="actions">
+                <div class="action-btn btn-a" data-key="Enter">A</div>
+                <div class="action-btn btn-b" data-key="Escape">B</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Resize Canvas to fit container resolution (internal resolution fixed or scaled)
+        // For pixel art look, keeping fixed resolution is often better, but scaling with CSS.
+        // Here we keep 800x600 internal but scaled by CSS.
+
+        // Game Constants
+        const TILE_SIZE = 40;
+        const SCREEN_WIDTH = 800;
+        const SCREEN_HEIGHT = 600;
+        const MAP_COLS = SCREEN_WIDTH / TILE_SIZE;
+        const MAP_ROWS = SCREEN_HEIGHT / TILE_SIZE;
+
+        // Tile Types
+        const TILE_FLOOR = 0;
+        const TILE_WALL = 1;
+
+        // Object Types
+        const OBJ_NONE = 0;
+        const OBJ_DESK = 1;
+        const OBJ_CHAIR = 2;
+        const OBJ_PLANT = 3;
+        const OBJ_PRINTER = 4;
+
+        // Colors
+        const COLOR_FLOOR = '#cccccc';
+        const COLOR_WALL = '#444444';
+        const COLOR_PLAYER = '#0000ff';
+        const COLOR_MENU_BG = '#303030';
+        const COLOR_MENU_BORDER = '#ffffff';
+
+        // Game State
+        const STATE_WORLD = 'WORLD';
+        const STATE_BATTLE = 'BATTLE';
+        let currentState = STATE_WORLD;
+
+        // Input
+        const keys = {};
+        let joystickVector = { x: 0, y: 0 };
+        let joystickTimer = 0; // Debounce for joystick menu navigation
+
+        // Player Object
+        const player = {
+            x: 100, // Pixel coordinates now
+            y: 100,
+            width: 30,
+            height: 30,
+            speed: 200, // pixels per second
+            color: COLOR_PLAYER,
+            level: 1,
+            hp: 20,
+            maxHp: 20,
+            xp: 0,
+            nextLevelXp: 50,
+            consultants: 0
+        };
+
+        // Data
+        const TITLES = ["Anwärter", "Inspektor", "Oberinspektor", "Amtmann", "Amtsrat"];
+        const ATTACKS = [
+            { name: "Permission Denied", damage: 4 },
+            { name: "Pass the Buck", damage: 6 },
+            { name: "Coffee Break", damage: 2 },
+            { name: "Form A38", damage: 8 }
+        ];
+        const ENEMY_TYPES = [
+            { name: "Consultant", color: "#FFA500", hp: 15, xp: 20, width: 30, height: 30 },
+            { name: "Politician", color: "#800080", hp: 25, xp: 30, width: 30, height: 30 },
+            { name: "Citizen", color: "#008000", hp: 10, xp: 10, width: 30, height: 30 },
+            { name: "Beamter", color: "#808080", hp: 20, xp: 25, width: 30, height: 30 }
+        ];
+
+        // Map Data
+        const worldMap = [];
+        const objectMap = []; // Stores objects like desks
+        const enemies = [];   // Visible enemies
+
+        // --- Initialization ---
+        function initMap() {
+            // Generate Map
+            for (let r = 0; r < MAP_ROWS; r++) {
+                const row = [];
+                const objRow = [];
+                for (let c = 0; c < MAP_COLS; c++) {
+                    // Walls on edges
+                    if (r === 0 || r === MAP_ROWS - 1 || c === 0 || c === MAP_COLS - 1) {
+                        row.push(TILE_WALL);
+                        objRow.push(OBJ_NONE);
+                    } else if (r % 5 === 0 && c > 2 && c < MAP_COLS - 3) {
+                         // Cubicle walls
+                         if (c % 4 !== 0) {
+                             row.push(TILE_WALL);
+                             objRow.push(OBJ_NONE);
+                         } else {
+                             row.push(TILE_FLOOR);
+                             objRow.push(OBJ_NONE);
+                         }
+                    } else {
+                        row.push(TILE_FLOOR);
+                        // Random objects
+                        if (Math.random() < 0.05) objRow.push(OBJ_PLANT);
+                        else if (Math.random() < 0.05) objRow.push(OBJ_PRINTER);
+                        else if (Math.random() < 0.1) objRow.push(OBJ_DESK);
+                        else if (Math.random() < 0.1) objRow.push(OBJ_CHAIR);
+                        else objRow.push(OBJ_NONE);
+                    }
+                }
+                worldMap.push(row);
+                objectMap.push(objRow);
+            }
+
+            // Ensure player spawn area is clear
+            const startR = Math.floor(player.y / TILE_SIZE);
+            const startC = Math.floor(player.x / TILE_SIZE);
+            if (objectMap[startR] && objectMap[startR][startC]) objectMap[startR][startC] = OBJ_NONE;
+            if (objectMap[startR] && objectMap[startR][startC+1]) objectMap[startR][startC+1] = OBJ_NONE;
+            if (objectMap[startR+1] && objectMap[startR+1][startC]) objectMap[startR+1][startC] = OBJ_NONE;
+            if (objectMap[startR+1] && objectMap[startR+1][startC+1]) objectMap[startR+1][startC+1] = OBJ_NONE;
+
+            // Spawn Enemies
+            for (let i = 0; i < 10; i++) {
+                spawnEnemy();
+            }
+        }
+
+        function spawnEnemy() {
+            let placed = false;
+            while (!placed) {
+                const r = Math.floor(Math.random() * (MAP_ROWS - 2)) + 1;
+                const c = Math.floor(Math.random() * (MAP_COLS - 2)) + 1;
+                const x = c * TILE_SIZE + 5;
+                const y = r * TILE_SIZE + 5;
+
+                // Check collision with walls/objects
+                if (worldMap[r][c] !== TILE_WALL && objectMap[r][c] === OBJ_NONE) {
+                    // Simple check against player
+                    const dx = x - player.x;
+                    const dy = y - player.y;
+                    if (dx*dx + dy*dy > 10000) {
+                        const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
+                        enemies.push({
+                            ...type,
+                            x: x,
+                            y: y,
+                            maxHp: type.hp, // Base stats
+                            id: Math.random()
+                        });
+                        placed = true;
+                    }
+                }
+            }
+        }
+
+        initMap();
+
+        // --- Input Handling ---
+
+        // Keyboard
+        window.addEventListener('keydown', (e) => {
+            if (keys[e.key]) return;
+            keys[e.key] = true;
+            if (currentState === STATE_BATTLE) handleBattleInput(e.key);
+        });
+        window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        // Joystick
+        const joystick = document.getElementById('joystick');
+        const knob = document.getElementById('joystick-knob');
+        let joystickActive = false;
+        let joystickCenter = { x: 0, y: 0 };
+        const maxRadius = 50;
+
+        function handleStart(e) {
+            e.preventDefault();
+            joystickActive = true;
+            const rect = joystick.getBoundingClientRect();
+            joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            handleMove(e);
+        }
+
+        function handleMove(e) {
+            if (!joystickActive) return;
+            e.preventDefault();
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            const dx = clientX - joystickCenter.x;
+            const dy = clientY - joystickCenter.y;
+            const distance = Math.min(Math.sqrt(dx*dx + dy*dy), maxRadius);
+            const angle = Math.atan2(dy, dx);
+
+            const knobX = Math.cos(angle) * distance;
+            const knobY = Math.sin(angle) * distance;
+
+            knob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
+
+            // Normalize vector
+            joystickVector.x = knobX / maxRadius;
+            joystickVector.y = knobY / maxRadius;
+        }
+
+        function handleEnd(e) {
+            e.preventDefault();
+            joystickActive = false;
+            joystickVector = { x: 0, y: 0 };
+            knob.style.transform = `translate(-50%, -50%)`;
+        }
+
+        joystick.addEventListener('mousedown', handleStart);
+        joystick.addEventListener('touchstart', handleStart, { passive: false });
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('touchmove', handleMove, { passive: false });
+        window.addEventListener('mouseup', handleEnd);
+        window.addEventListener('touchend', handleEnd);
+
+        // Buttons
+        document.querySelectorAll('.action-btn').forEach(btn => {
+             const key = btn.getAttribute('data-key');
+             const trigger = () => {
+                 if (currentState === STATE_BATTLE) handleBattleInput(key);
+                 // Simulate key press for checks
+                 keys[key] = true;
+                 setTimeout(() => keys[key] = false, 100);
+             };
+             btn.addEventListener('touchstart', (e) => { e.preventDefault(); trigger(); });
+             btn.addEventListener('mousedown', (e) => { e.preventDefault(); trigger(); });
+        });
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+            update(deltaTime);
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update(dt) {
+            if (currentState === STATE_WORLD) updateWorld(dt);
+            else if (currentState === STATE_BATTLE) updateBattleJoystick(dt);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (currentState === STATE_WORLD) drawWorld();
+            else if (currentState === STATE_BATTLE) drawBattle();
+        }
+
+        function getTitle(level) {
+            const index = Math.floor((level - 1) / 5);
+            return TITLES[Math.min(index, TITLES.length - 1)];
+        }
+
+        // --- World Update ---
+        function updateBattleJoystick(dt) {
+            joystickTimer -= dt;
+            if (joystickTimer > 0) return;
+
+            // Threshold for joystick direction
+            if (joystickVector.y < -0.5) {
+                // Up
+                handleBattleInput('ArrowUp');
+                joystickTimer = 0.3; // 300ms cooldown
+            } else if (joystickVector.y > 0.5) {
+                // Down
+                handleBattleInput('ArrowDown');
+                joystickTimer = 0.3;
+            }
+        }
+
+        function updateWorld(dt) {
+            // Calculate movement vector from Keys + Joystick
+            let dx = joystickVector.x;
+            let dy = joystickVector.y;
+
+            if (keys['ArrowUp']) dy = -1;
+            if (keys['ArrowDown']) dy = 1;
+            if (keys['ArrowLeft']) dx = -1;
+            if (keys['ArrowRight']) dx = 1;
+
+            // Normalize if needed (simple clamp for now)
+            const len = Math.sqrt(dx*dx + dy*dy);
+            if (len > 1) { dx /= len; dy /= len; }
+
+            if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+                const nextX = player.x + dx * player.speed * dt;
+                const nextY = player.y + dy * player.speed * dt;
+
+                // Collision Detection (AABB vs Tiles/Objects)
+                if (!checkCollision(nextX, player.y)) player.x = nextX;
+                if (!checkCollision(player.x, nextY)) player.y = nextY;
+            }
+
+            // Check Enemy Proximity
+            for (let i = 0; i < enemies.length; i++) {
+                const enemy = enemies[i];
+                const dist = Math.sqrt((player.x - enemy.x)**2 + (player.y - enemy.y)**2);
+                if (dist < 40) { // Trigger range
+                    startBattle(enemy, i);
+                    break;
+                }
+            }
+        }
+
+        function checkCollision(x, y) {
+            // Check 4 corners of player
+            const points = [
+                { x: x, y: y },
+                { x: x + player.width, y: y },
+                { x: x, y: y + player.height },
+                { x: x + player.width, y: y + player.height }
+            ];
+
+            for (let p of points) {
+                const c = Math.floor(p.x / TILE_SIZE);
+                const r = Math.floor(p.y / TILE_SIZE);
+
+                if (c < 0 || c >= MAP_COLS || r < 0 || r >= MAP_ROWS) return true; // Out of bounds
+                if (worldMap[r][c] === TILE_WALL) return true;
+                if (objectMap[r][c] !== OBJ_NONE) return true; // Collide with objects
+            }
+            return false;
+        }
+
+        function drawWorld() {
+            // Draw Tiles & Objects
+            for (let r = 0; r < MAP_ROWS; r++) {
+                for (let c = 0; c < MAP_COLS; c++) {
+                    const x = c * TILE_SIZE;
+                    const y = r * TILE_SIZE;
+
+                    // Floor
+                    ctx.fillStyle = COLOR_FLOOR;
+                    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = '#ddd';
+                    ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+
+                    // Walls
+                    if (worldMap[r][c] === TILE_WALL) {
+                        ctx.fillStyle = COLOR_WALL;
+                        ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                    }
+
+                    // Objects
+                    const obj = objectMap[r][c];
+                    if (obj !== OBJ_NONE) {
+                        if (obj === OBJ_DESK) {
+                             ctx.fillStyle = '#8B4513'; // Brown Desk
+                             ctx.fillRect(x+5, y+10, 30, 20);
+                        } else if (obj === OBJ_CHAIR) {
+                             ctx.fillStyle = '#000000'; // Chair
+                             ctx.fillRect(x+10, y+10, 20, 20);
+                        } else if (obj === OBJ_PLANT) {
+                             ctx.fillStyle = '#006400'; // Green Plant
+                             ctx.beginPath();
+                             ctx.arc(x+20, y+20, 10, 0, Math.PI*2);
+                             ctx.fill();
+                        } else if (obj === OBJ_PRINTER) {
+                             ctx.fillStyle = '#dddddd'; // Printer
+                             ctx.fillRect(x+5, y+5, 30, 30);
+                        }
+                    }
+                }
+            }
+
+            // Draw Enemies
+            enemies.forEach(e => {
+                ctx.fillStyle = e.color;
+                ctx.fillRect(e.x, e.y, e.width, e.height);
+                // Name tag
+                ctx.fillStyle = 'white';
+                ctx.font = '10px Arial';
+                ctx.fillText(e.name, e.x, e.y - 5);
+            });
+
+            // Draw Player
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // UI Overlay
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0, 0, 260, 60);
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Courier New';
+            ctx.fillText(`${getTitle(player.level)} (Lvl ${player.level})`, 10, 20);
+            ctx.fillText(`HP: ${player.hp}/${player.maxHp} | XP: ${player.xp}/${player.nextLevelXp}`, 10, 40);
+        }
+
+        // --- Battle System ---
+        let currentEnemyIndex = -1;
+
+        function startBattle(enemy, index) {
+            currentState = STATE_BATTLE;
+            currentEnemyIndex = index;
+
+            // Scale stats based on level difference or just simple scaling
+            const levelScale = 1 + (player.level - 1) * 0.2;
+
+            battleState = {
+                enemy: {
+                    ...enemy,
+                    maxHp: Math.floor(enemy.hp * levelScale),
+                    hp: Math.floor(enemy.hp * levelScale),
+                    xp: Math.floor(enemy.xp * levelScale)
+                },
+                menuSelection: 0,
+                attackSelection: 0,
+                phase: 'MENU',
+                log: `You encountered a ${enemy.name}!`,
+                turn: 'PLAYER'
+            };
+
+            // Stop movement
+            joystickVector = { x: 0, y: 0 };
+            keys['ArrowUp'] = false; keys['ArrowDown'] = false;
+            keys['ArrowLeft'] = false; keys['ArrowRight'] = false;
+        }
+
+        function handleBattleInput(key) {
+             if (battleState.phase === 'MENU') {
+                if (key === 'ArrowUp') battleState.menuSelection = (battleState.menuSelection - 1 + 3) % 3;
+                if (key === 'ArrowDown') battleState.menuSelection = (battleState.menuSelection + 1) % 3;
+                if (key === 'Enter' || key === ' ') {
+                    if (battleState.menuSelection === 0) {
+                        battleState.phase = 'ATTACK_SELECT';
+                        battleState.attackSelection = 0;
+                        battleState.log = "Select Attack:";
+                    } else if (battleState.menuSelection === 1) attemptCatch();
+                    else if (battleState.menuSelection === 2) {
+                        battleState.log = "Ran away!";
+                        battleState.phase = 'END';
+                    }
+                }
+            } else if (battleState.phase === 'ATTACK_SELECT') {
+                if (key === 'ArrowUp') battleState.attackSelection = (battleState.attackSelection - 1 + 4) % 4;
+                if (key === 'ArrowDown') battleState.attackSelection = (battleState.attackSelection + 1) % 4;
+                if (key === 'Escape') {
+                    battleState.phase = 'MENU';
+                    battleState.log = "What will you do?";
+                }
+                if (key === 'Enter' || key === ' ') performAttack(ATTACKS[battleState.attackSelection]);
+            } else if (battleState.phase === 'END' || battleState.phase === 'LEVEL_UP') {
+                 if (key === 'Enter' || key === ' ') {
+                     if (battleState.enemy.hp <= 0 || battleState.phase === 'LEVEL_UP') {
+                         // Remove enemy
+                         if (currentEnemyIndex > -1) {
+                             enemies.splice(currentEnemyIndex, 1);
+                             spawnEnemy(); // Spawn new one to keep world populated
+                         }
+                     }
+                     currentState = STATE_WORLD;
+                 }
+            }
+        }
+
+        function performAttack(attack) {
+            let damage = attack.damage + Math.floor(player.level / 2);
+            if (player.consultants > 0) damage += player.consultants;
+
+            battleState.enemy.hp -= damage;
+            battleState.log = `Used ${attack.name}! Dealt ${damage} dmg.`;
+            battleState.phase = 'BATTLE_ANIMATION';
+
+            if (battleState.enemy.hp <= 0) {
+                battleState.enemy.hp = 0;
+                setTimeout(() => winBattle(), 1000);
+            } else {
+                setTimeout(enemyTurn, 1000);
+            }
+        }
+
+        function attemptCatch() {
+            if (battleState.enemy.name === "Consultant") {
+                if (Math.random() < 0.6) {
+                    player.consultants++;
+                    battleState.log = "Hired Consultant!";
+                    battleState.phase = 'END';
+                    battleState.enemy.hp = 0; // Considered defeated/removed
+                } else {
+                    battleState.log = "Offer refused!";
+                    battleState.phase = 'BATTLE_ANIMATION';
+                    setTimeout(enemyTurn, 1000);
+                }
+            } else {
+                battleState.log = "Can only hire Consultants!";
+                battleState.phase = 'BATTLE_ANIMATION';
+                setTimeout(() => { battleState.phase = 'MENU'; battleState.log = "Action?"; }, 1000);
+            }
+        }
+
+        function enemyTurn() {
+            if (currentState !== STATE_BATTLE) return;
+            const damage = Math.max(1, Math.floor(player.level * 1.5) - 2);
+            player.hp -= damage;
+            battleState.log = `${battleState.enemy.name} attacks! -${damage} HP.`;
+
+            if (player.hp <= 0) {
+                player.hp = 0;
+                battleState.phase = 'END';
+                battleState.log = "Burnout! (Press A)";
+                player.hp = player.maxHp;
+                player.x = 100; player.y = 100; // Respawn
+            } else {
+                battleState.phase = 'MENU';
+            }
+        }
+
+        function winBattle() {
+            const xpGain = battleState.enemy.xp;
+            player.xp += xpGain;
+            battleState.log = `Victory! +${xpGain} XP.`;
+            if (player.xp >= player.nextLevelXp) setTimeout(() => levelUp(), 1000);
+            else battleState.phase = 'END';
+        }
+
+        function levelUp() {
+            player.level++;
+            player.xp -= player.nextLevelXp;
+            player.nextLevelXp = Math.floor(player.nextLevelXp * 1.5);
+            player.maxHp += 5;
+            player.hp = player.maxHp;
+            battleState.log = `Promoted to ${getTitle(player.level)}!`;
+            battleState.phase = 'LEVEL_UP';
+        }
+
+        function drawBattle() {
+             // Background
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+            // Battle Arena Area
+            ctx.fillStyle = '#eee';
+            ctx.fillRect(50, 50, 700, 350);
+
+            // Enemy
+            const enemy = battleState.enemy;
+            ctx.fillStyle = enemy.color;
+            ctx.fillRect(500, 100, 100, 100);
+
+            // Enemy Stats
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Courier New';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${enemy.name}`, 450, 80);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(450, 90, 200, 10);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(450, 90, 200 * (enemy.hp / enemy.maxHp), 10);
+
+            // Player (Back view representation)
+            ctx.fillStyle = player.color;
+            ctx.fillRect(150, 250, 100, 100);
+
+            // Player Stats
+            ctx.fillStyle = 'black';
+            ctx.fillText(`${getTitle(player.level)}`, 150, 230);
+             ctx.fillStyle = 'red';
+            ctx.fillRect(150, 240, 200, 10);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(150, 240, 200 * (player.hp / player.maxHp), 10);
+            ctx.fillStyle = 'black';
+            ctx.fillText(`${player.hp}/${player.maxHp}`, 360, 250);
+
+            // Menu / Dialog Box
+            ctx.fillStyle = COLOR_MENU_BG;
+            ctx.fillRect(0, 400, SCREEN_WIDTH, 200);
+            ctx.strokeStyle = COLOR_MENU_BORDER;
+            ctx.lineWidth = 4;
+            ctx.strokeRect(5, 405, SCREEN_WIDTH - 10, 190);
+
+            // Text
+            ctx.fillStyle = 'white';
+            ctx.font = '24px Courier New';
+            ctx.fillText(battleState.log, 30, 450);
+
+            // Menu Options
+            const startX = 500;
+            const startY = 480;
+
+            if (battleState.phase === 'MENU') {
+                const options = ["FIGHT", "HIRE", "RUN"];
+                options.forEach((opt, index) => {
+                    if (index === battleState.menuSelection) {
+                        ctx.fillStyle = '#ffff00';
+                        ctx.fillText(`> ${opt}`, startX, startY + index * 40);
+                    } else {
+                        ctx.fillStyle = 'white';
+                        ctx.fillText(`  ${opt}`, startX, startY + index * 40);
+                    }
+                });
+            } else if (battleState.phase === 'ATTACK_SELECT') {
+                ATTACKS.forEach((att, index) => {
+                    if (index === battleState.attackSelection) {
+                         ctx.fillStyle = '#ffff00';
+                        ctx.fillText(`> ${att.name}`, startX, startY + index * 30 - 20);
+                    } else {
+                         ctx.fillStyle = 'white';
+                        ctx.fillText(`  ${att.name}`, startX, startY + index * 30 - 20);
+                    }
+                });
+            } else if (battleState.phase === 'END' || battleState.phase === 'LEVEL_UP') {
+                 ctx.fillStyle = '#ffff00';
+                 ctx.fillText("Press A to continue...", startX, startY + 40);
+            }
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
