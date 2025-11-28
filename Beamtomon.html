@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Beamtomon: Office Editions</title>
     <style>
         body {
@@ -13,6 +13,7 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
+            width: 100vw;
             color: white;
             font-family: 'Courier New', Courier, monospace;
             overflow: hidden;
@@ -21,76 +22,69 @@
         }
 
         #game-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            max-width: 1280px;
-            max-height: 800px; /* Increased slightly to fit UI */
             display: flex;
             flex-direction: column;
+            width: 100%;
+            height: 100%;
             background: #202020;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
-        /* --- New UI Panel --- */
+        /* --- UI Panel (Top) --- */
         #ui-panel {
+            flex: 0 0 auto; 
             background-color: #2c3e50;
             border-bottom: 4px solid #fff;
-            padding: 10px 20px;
+            padding: 10px 15px;
             display: flex;
             flex-direction: column;
             gap: 5px;
-            height: 80px;
-            flex-shrink: 0;
             z-index: 10;
-            box-sizing: border-box;
+            font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
 
         .ui-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 16px;
-            font-weight: bold;
+            flex-wrap: wrap; 
         }
 
-        .ui-stat {
+        .ui-group {
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
         .bar-container {
-            width: 100px;
-            height: 10px;
+            width: 80px;
+            height: 8px;
             background: #555;
             border: 1px solid #fff;
             position: relative;
         }
 
-        .bar-fill {
-            height: 100%;
-            transition: width 0.2s;
-        }
-
-        .hp-fill { background-color: #e74c3c; }
+        .bar-fill { height: 100%; transition: width 0.2s; }
+        .hp-fill { background-color: #e74c3c; } 
         .xp-fill { background-color: #3498db; }
 
-        #ui-score { color: #f1c40f; }
+        #ui-score { color: #f1c40f; font-weight: bold; }
+        #ui-signatures { color: #2ecc71; font-weight: bold; text-transform: uppercase; }
         #ui-donuts { color: #e67e22; }
 
-        /* Canvas Area */
+        /* --- Canvas Wrapper --- */
         #canvas-wrapper {
-            flex-grow: 1;
+            flex: 1 1 auto; 
             position: relative;
-            overflow: hidden;
             background: #000;
+            overflow: hidden;
+            width: 100%; 
         }
 
         canvas {
+            display: block;
             width: 100%;
             height: 100%;
-            display: block;
             image-rendering: pixelated; 
         }
 
@@ -109,50 +103,44 @@
             position: absolute;
             bottom: 40px;
             left: 40px;
-            width: 150px;
-            height: 150px;
-            background: rgba(255, 255, 255, 0.05);
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 50%;
             pointer-events: auto;
             touch-action: none;
             transition: opacity 0.3s;
         }
         
-        .joystick-area:active {
-            background: rgba(255, 255, 255, 0.1);
-        }
+        .joystick-area:active { background: rgba(255, 255, 255, 0.2); }
 
         .joystick-knob {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 50px;
-            height: 50px;
-            background: rgba(255, 255, 255, 0.25);
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.4);
             border-radius: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
 
         .actions {
             position: absolute;
             bottom: 40px;
             right: 40px;
-            width: 100px;
-            height: 100px;
+            width: 80px;
+            height: 80px;
             pointer-events: auto;
         }
 
         .action-btn {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            border-radius: 50%;
-            background: rgba(0, 255, 0, 0.15);
-            border: 2px solid rgba(255, 255, 255, 0.25);
             width: 80px;
             height: 80px;
+            border-radius: 50%;
+            background: rgba(0, 255, 0, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.4);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -161,13 +149,9 @@
             font-size: 28px;
             touch-action: manipulation;
             transition: transform 0.1s;
-            text-shadow: 0 2px 2px rgba(0,0,0,0.25);
         }
 
-        .action-btn:active, .action-btn.active {
-             background: rgba(0, 255, 0, 0.3);
-             transform: scale(0.95);
-        }
+        .action-btn:active { background: rgba(0, 255, 0, 0.4); transform: scale(0.95); }
 
         #game-over-modal {
             position: absolute;
@@ -181,72 +165,63 @@
             justify-content: center;
             align-items: center;
             z-index: 100;
+            pointer-events: auto; /* Force pointer events */
         }
 
-        .hidden {
-            display: none !important;
-        }
+        .hidden { display: none !important; }
 
         .modal-content {
             background: #2c3e50;
-            padding: 40px;
+            padding: 30px;
             border: 4px solid #fff;
             border-radius: 10px;
             text-align: center;
-            max-width: 400px;
+            max-width: 80%;
+            pointer-events: auto;
         }
 
-        .modal-title {
-            font-size: 48px;
-            color: #e74c3c;
-            margin-bottom: 20px;
-            text-transform: uppercase;
-            text-shadow: 2px 2px 0px #000;
-        }
-
-        .modal-score {
-            font-size: 24px;
-            margin-bottom: 30px;
-            color: #f1c40f;
-        }
+        .modal-title { font-size: 32px; color: #e74c3c; margin-bottom: 15px; }
+        .modal-score { font-size: 20px; margin-bottom: 20px; color: #f1c40f; }
 
         .restart-btn {
             background: #27ae60;
             color: white;
             border: none;
             padding: 15px 30px;
-            font-size: 24px;
+            font-size: 20px;
             font-family: 'Courier New', Courier, monospace;
             cursor: pointer;
             border-radius: 5px;
-            border-bottom: 4px solid #1e8449;
-            transition: transform 0.1s;
+            pointer-events: auto;
+            touch-action: manipulation;
         }
-
-        .restart-btn:active {
-            transform: translateY(2px);
-            border-bottom: 2px solid #1e8449;
-        }
+        
+        .restart-btn:hover { background: #2ecc71; }
+        .restart-btn:active { background: #1e8449; transform: translateY(2px); }
 
     </style>
 </head>
 <body>
     <div id="game-container">
-        <!-- New UI Panel (Above Play Field) -->
+        <!-- UI Panel -->
         <div id="ui-panel">
-            <div class="ui-row">
+            <div class="ui-row" style="margin-bottom: 5px;">
                 <span id="ui-name">Intern (Lvl 1)</span>
-                <span id="ui-score">Score: 0</span>
-                <span id="ui-stage">Stage: 1</span>
+                <div class="ui-group">
+                    <span id="ui-score">0 Pts</span>
+                    <span id="ui-stage" style="color:#aaa;">Stg 1</span>
+                </div>
             </div>
             <div class="ui-row">
-                <div class="ui-stat">
-                    <span>HP:</span>
+                <div class="ui-group">
+                    <div style="width: 40px;">Sanity</div>
                     <div class="bar-container"><div id="bar-hp" class="bar-fill hp-fill" style="width: 100%;"></div></div>
-                    <span id="text-hp">20/20</span>
                 </div>
-                <div class="ui-stat">
-                    <span>XP:</span>
+                <span id="ui-signatures">SIGS: 0/3</span>
+            </div>
+            <div class="ui-row" style="margin-top: 2px;">
+                <div class="ui-group">
+                    <div style="width: 40px;">XP</div>
                     <div class="bar-container"><div id="bar-xp" class="bar-fill xp-fill" style="width: 0%;"></div></div>
                 </div>
                 <span id="ui-donuts">🍩 x1</span>
@@ -258,9 +233,9 @@
             
             <div id="game-over-modal" class="hidden">
                 <div class="modal-content">
-                    <div class="modal-title">Burnout!</div>
+                    <div class="modal-title">BURNOUT!</div>
                     <div class="modal-score" id="final-score">Score: 0</div>
-                    <button class="restart-btn" onclick="restartGame()">Back to Work</button>
+                    <button id="restart-btn" class="restart-btn">Back to Work</button>
                 </div>
             </div>
 
@@ -269,7 +244,7 @@
                     <div class="joystick-knob" id="joystick-knob"></div>
                 </div>
                 <div class="actions">
-                    <div class="action-btn btn-a" data-key="Enter">A</div>
+                    <div class="action-btn" data-key="Enter">A</div>
                 </div>
             </div>
         </div>
@@ -279,7 +254,7 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Game Constants
+        // Game Constants (Internal Resolution)
         const TILE_SIZE = 40;
         const SCREEN_WIDTH = 800;
         const SCREEN_HEIGHT = 600;
@@ -305,7 +280,6 @@
         const COLOR_MENU_BG = '#303030';
         const COLOR_MENU_BORDER = '#ffffff';
 
-        // Factions
         const FACT_OFFICER = 'OFFICER';     
         const FACT_POLITICIAN = 'POLITICIAN'; 
         const FACT_CITIZEN = 'CITIZEN';     
@@ -315,15 +289,12 @@
             if (attackerType === FACT_OFFICER && defenderType === FACT_CITIZEN) return 1.5;
             if (attackerType === FACT_CITIZEN && defenderType === FACT_POLITICIAN) return 1.5;
             if (attackerType === FACT_POLITICIAN && defenderType === FACT_OFFICER) return 1.5;
-            
             if (attackerType === FACT_OFFICER && defenderType === FACT_POLITICIAN) return 0.5;
             if (attackerType === FACT_CITIZEN && defenderType === FACT_OFFICER) return 0.5;
             if (attackerType === FACT_POLITICIAN && defenderType === FACT_CITIZEN) return 0.5;
-            
             return 1.0;
         }
 
-        // Game State
         const STATE_WORLD = 'WORLD';
         const STATE_BATTLE = 'BATTLE';
         const STATE_GAME_OVER = 'GAME_OVER';
@@ -345,7 +316,6 @@
 
         const floatingTexts = [];
 
-        // Player Object
         const player = {
             x: 100,
             y: 100,
@@ -361,11 +331,13 @@
             xp: 0,
             nextLevelXp: 50,
             score: 0,
-            consultants: 0,
+            signatures: 0,
             inventory: { donuts: 1 },
             status: null,
             isWalking: false
         };
+
+        const SIGNATURES_NEEDED = 3;
 
         let coffeeMachineLoc = { x: 0, y: 0 };
         let exitDoorLoc = { x: 0, y: 0 };
@@ -417,6 +389,21 @@
         const objectMap = [];
         const enemies = [];
         const lootedObjects = []; 
+
+        function updateHUD() {
+            document.getElementById('ui-name').innerText = `${getTitle(player.level)} (Lvl ${player.level})`;
+            document.getElementById('ui-score').innerText = `${player.score} Pts`;
+            document.getElementById('ui-stage').innerText = `Stg ${currentStage}`;
+            
+            const sigs = document.getElementById('ui-signatures');
+            sigs.innerText = `SIGS: ${player.signatures}/${SIGNATURES_NEEDED}`;
+            sigs.style.color = player.signatures >= SIGNATURES_NEEDED ? '#2ecc71' : '#e74c3c';
+
+            document.getElementById('ui-donuts').innerText = `🍩 x${player.inventory.donuts}`;
+            
+            document.getElementById('bar-hp').style.width = `${Math.max(0, Math.min(100, (player.hp / player.maxHp) * 100))}%`;
+            document.getElementById('bar-xp').style.width = `${Math.max(0, Math.min(100, (player.xp / player.nextLevelXp) * 100))}%`;
+        }
 
         // --- Drawing Helpers ---
 
@@ -590,7 +577,7 @@
                 ctx.fillStyle = '#3e2723'; ctx.fillRect(x+15, y+20, 10, 7);
                 ctx.fillStyle = 'red'; ctx.fillRect(x+25, y+8, 2, 2);
             } else if (type === OBJ_EXIT_DOOR) {
-                const locked = enemies.length > 0;
+                const locked = player.signatures < SIGNATURES_NEEDED;
                 ctx.fillStyle = locked ? '#c0392b' : '#2ecc71'; 
                 ctx.fillRect(x + 5, y + 5, 30, 35);
                 ctx.lineWidth = 2;
@@ -607,13 +594,13 @@
         }
 
         // --- Map Generation ---
-        
         function initMap() {
             mapSeedVal = 100 + currentStage * 997; 
             worldMap.length = 0;
             objectMap.length = 0;
             enemies.length = 0;
             lootedObjects.length = 0; 
+            player.signatures = 0;
 
             for (let r = 0; r < MAP_ROWS; r++) {
                 const row = new Array(MAP_COLS).fill(TILE_WALL);
@@ -721,6 +708,7 @@
             for (let i = 0; i < enemyCount; i++) {
                 spawnEnemy();
             }
+            updateHUD(); // Initial HUD update
         }
 
         function spawnEnemy() {
@@ -838,6 +826,9 @@
              btn.addEventListener('mousedown', (e) => { e.preventDefault(); trigger(); });
         });
 
+        // Event listener for restart
+        document.getElementById('restart-btn').addEventListener('click', restartGame);
+
         // --- Game Loop ---
         let lastTime = 0;
         function gameLoop(timestamp) {
@@ -894,25 +885,6 @@
         function getTitle(level) {
             const index = Math.floor((level - 1) / 5);
             return TITLES[Math.min(index, TITLES.length - 1)];
-        }
-
-        function updateHUD() {
-            const uiPanel = document.getElementById('ui-panel');
-            if (currentState === STATE_BATTLE) {
-                uiPanel.classList.add('hidden');
-                return;
-            } else {
-                uiPanel.classList.remove('hidden');
-            }
-
-            document.getElementById('ui-name').innerText = `${getTitle(player.level)} (Lvl ${player.level})`;
-            document.getElementById('ui-score').innerText = `Score: ${player.score}`;
-            document.getElementById('ui-stage').innerText = `Stage: ${currentStage}`;
-            document.getElementById('ui-donuts').innerText = `🍩 x${player.inventory.donuts}`;
-            
-            document.getElementById('text-hp').innerText = `${Math.floor(player.hp)}/${player.maxHp}`;
-            document.getElementById('bar-hp').style.width = `${(player.hp / player.maxHp) * 100}%`;
-            document.getElementById('bar-xp').style.width = `${(player.xp / player.nextLevelXp) * 100}%`;
         }
 
         // --- World Update ---
@@ -995,12 +967,12 @@
                 const r = Math.floor((nextY + 15) / TILE_SIZE);
                 
                 if (objectMap[r] && objectMap[r][c] === OBJ_EXIT_DOOR) {
-                    if (enemies.length === 0) {
+                    if (player.signatures >= SIGNATURES_NEEDED) {
                         nextStage();
                         return; 
                     } else {
                         floatingTexts.push({
-                            text: "Locked! Defeat Enemies!",
+                            text: `Locked! Need ${SIGNATURES_NEEDED} Signatures!`,
                             x: player.x,
                             y: player.y - 30,
                             color: '#e74c3c',
@@ -1130,7 +1102,8 @@
         function startBattle(enemy, index) {
             currentState = STATE_BATTLE;
             currentEnemyIndex = index;
-            updateHUD(); // Hide HUD
+            // Hide UI panel in battle
+            document.getElementById('ui-panel').style.display = 'none';
 
             battleState = {
                 enemy: enemy,
@@ -1139,7 +1112,7 @@
                 phase: 'MENU',
                 log: `You encountered a ${enemy.name}!`,
                 turn: 'PLAYER',
-                onAck: null // Wait for A
+                onAck: null 
             };
 
             joystickVector = { x: 0, y: 0 };
@@ -1201,7 +1174,11 @@
                             }
                             battleCooldown = 2.0;
                             battleState.phase = 'MESSAGE';
-                            battleState.onAck = () => { currentState = STATE_WORLD; updateHUD(); };
+                            battleState.onAck = () => { 
+                                currentState = STATE_WORLD; 
+                                document.getElementById('ui-panel').style.display = 'flex';
+                                updateHUD(); 
+                            };
                         } else {
                             battleState.log = "Failed to run!";
                             battleState.phase = 'MESSAGE';
@@ -1221,6 +1198,7 @@
                          }
                      }
                      currentState = STATE_WORLD;
+                     document.getElementById('ui-panel').style.display = 'flex';
                      updateHUD();
                  }
             }
@@ -1277,7 +1255,12 @@
                     player.consultants++;
                     battleState.log = "Hired Consultant!";
                     battleState.phase = 'MESSAGE';
-                    battleState.onAck = () => { currentState = STATE_WORLD; enemies.splice(currentEnemyIndex, 1); updateHUD(); };
+                    battleState.onAck = () => { 
+                        currentState = STATE_WORLD; 
+                        enemies.splice(currentEnemyIndex, 1); 
+                        document.getElementById('ui-panel').style.display = 'flex';
+                        updateHUD(); 
+                    };
                 } else {
                     battleState.log = "Offer refused!";
                     battleState.phase = 'MESSAGE';
@@ -1354,13 +1337,21 @@
             player.xp += xpGain;
             const scoreGain = battleState.enemy.maxHp * 10;
             player.score += scoreGain;
-            battleState.log = `Win! +${xpGain} XP. +${scoreGain} Pts.`;
+            
+            let sigText = "";
+            if (Math.random() < 0.5) {
+                player.signatures++;
+                sigText = " Found Signature!";
+            }
+
+            battleState.log = `Win! +${xpGain} XP. +${scoreGain} Pts.${sigText}`;
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
                 if (player.xp >= player.nextLevelXp) levelUp();
                 else {
                     if (currentEnemyIndex > -1) enemies.splice(currentEnemyIndex, 1);
                     currentState = STATE_WORLD;
+                    document.getElementById('ui-panel').style.display = 'flex';
                     updateHUD();
                 }
             };
@@ -1377,6 +1368,7 @@
             battleState.onAck = () => {
                 if (currentEnemyIndex > -1) enemies.splice(currentEnemyIndex, 1);
                 currentState = STATE_WORLD;
+                document.getElementById('ui-panel').style.display = 'flex';
                 updateHUD();
             };
         }
@@ -1396,6 +1388,7 @@
             document.getElementById('game-over-modal').classList.add('hidden');
             initMap();
             currentState = STATE_WORLD;
+            document.getElementById('ui-panel').style.display = 'flex';
             updateHUD();
             draw();
         }
