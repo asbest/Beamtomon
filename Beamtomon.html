@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beamtomon</title>
+    <title>Beamtomon: Office Editions</title>
     <style>
         body {
             margin: 0;
@@ -26,7 +26,7 @@
             height: 100%;
             max-width: 1280px;
             max-height: 720px;
-            /* Keep aspect ratio roughly consistent if desired, or fill screen */
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
         canvas {
@@ -34,7 +34,7 @@
             height: 100%;
             background-color: #000;
             display: block;
-            image-rendering: pixelated;
+            image-rendering: pixelated; 
         }
 
         /* Virtual Controls */
@@ -57,6 +57,11 @@
             border-radius: 50%;
             pointer-events: auto;
             touch-action: none;
+            transition: opacity 0.3s;
+        }
+        
+        .joystick-area:active {
+            background: rgba(255, 255, 255, 0.2);
         }
 
         .joystick-knob {
@@ -69,6 +74,7 @@
             border-radius: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
         }
 
         .actions {
@@ -94,14 +100,17 @@
             font-weight: bold;
             font-size: 24px;
             touch-action: manipulation;
+            transition: transform 0.1s;
+            text-shadow: 0 2px 2px rgba(0,0,0,0.5);
         }
 
         .action-btn:active, .action-btn.active {
              background: rgba(255, 255, 255, 0.5);
+             transform: scale(0.95);
         }
 
-        .btn-a { bottom: 20px; right: 0px; background-color: rgba(0, 255, 0, 0.2); }
-        .btn-b { bottom: 0px; right: 90px; background-color: rgba(255, 0, 0, 0.2); }
+        .btn-a { bottom: 20px; right: 0px; background-color: rgba(0, 255, 0, 0.3); }
+        .btn-b { bottom: 0px; right: 90px; background-color: rgba(255, 0, 0, 0.3); }
 
     </style>
 </head>
@@ -123,10 +132,6 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Resize Canvas to fit container resolution (internal resolution fixed or scaled)
-        // For pixel art look, keeping fixed resolution is often better, but scaling with CSS.
-        // Here we keep 800x600 internal but scaled by CSS.
-
         // Game Constants
         const TILE_SIZE = 40;
         const SCREEN_WIDTH = 800;
@@ -146,9 +151,8 @@
         const OBJ_PRINTER = 4;
 
         // Colors
-        const COLOR_FLOOR = '#cccccc';
-        const COLOR_WALL = '#444444';
-        const COLOR_PLAYER = '#0000ff';
+        const COLOR_FLOOR = '#e0e0e0';
+        const COLOR_WALL = '#555555';
         const COLOR_MENU_BG = '#303030';
         const COLOR_MENU_BORDER = '#ffffff';
 
@@ -156,91 +160,339 @@
         const STATE_WORLD = 'WORLD';
         const STATE_BATTLE = 'BATTLE';
         let currentState = STATE_WORLD;
+        let shakeAmount = 0;
+        let battleCooldown = 0; // Cooldown after running away
 
         // Input
         const keys = {};
         let joystickVector = { x: 0, y: 0 };
-        let joystickTimer = 0; // Debounce for joystick menu navigation
+        let joystickTimer = 0;
 
         // Player Object
         const player = {
-            x: 100, // Pixel coordinates now
+            x: 100,
             y: 100,
             width: 30,
             height: 30,
-            speed: 200, // pixels per second
-            color: COLOR_PLAYER,
+            speed: 200,
+            color: '#3498db',
+            type: "Beamter",
             level: 1,
             hp: 20,
             maxHp: 20,
             xp: 0,
             nextLevelXp: 50,
-            consultants: 0
+            consultants: 0,
+            animFrame: 0
         };
 
         // Data
         const TITLES = ["Anwärter", "Inspektor", "Oberinspektor", "Amtmann", "Amtsrat"];
-        const ATTACKS = [
+        const PLAYER_ATTACKS = [
             { name: "Permission Denied", damage: 4 },
             { name: "Pass the Buck", damage: 6 },
-            { name: "Coffee Break", damage: 2 },
+            { name: "Coffee Break", damage: 2, heal: true },
             { name: "Form A38", damage: 8 }
         ];
+
+        const ENEMY_MOVES = {
+            "Consultant": [
+                { name: "Synergy Strike", damage: 5 },
+                { name: "Mass Layoff", damage: 9 },
+                { name: "Buzzword Blast", damage: 3 },
+                { name: "Circle Back", damage: 4 }
+            ],
+            "Politician": [
+                { name: "Empty Promise", damage: 2 },
+                { name: "Tax Hike", damage: 7 },
+                { name: "Filibuster", damage: 4 },
+                { name: "Scandal", damage: 8 }
+            ],
+            "Citizen": [
+                { name: "Complaint", damage: 3 },
+                { name: "Angry Email", damage: 4 },
+                { name: "Phone Call", damage: 2 },
+                { name: "Form Request", damage: 1 }
+            ],
+            "Colleague": [
+                { name: "Reply All", damage: 5 },
+                { name: "Gossip", damage: 3 },
+                { name: "Microwave Fish", damage: 6 },
+                { name: "Meeting Invite", damage: 4 }
+            ]
+        };
+        
         const ENEMY_TYPES = [
-            { name: "Consultant", color: "#FFA500", hp: 15, xp: 20, width: 30, height: 30 },
-            { name: "Politician", color: "#800080", hp: 25, xp: 30, width: 30, height: 30 },
-            { name: "Citizen", color: "#008000", hp: 10, xp: 10, width: 30, height: 30 },
-            { name: "Beamter", color: "#808080", hp: 20, xp: 25, width: 30, height: 30 }
+            { name: "Consultant", color: "#f1c40f", shirt: "#f1c40f", pants: "#2c3e50", hp: 15, xp: 20 },
+            { name: "Politician", color: "#9b59b6", shirt: "#8e44ad", pants: "#2c3e50", hp: 25, xp: 30 },
+            { name: "Citizen", color: "#2ecc71", shirt: "#27ae60", pants: "#ecf0f1", hp: 10, xp: 10 },
+            { name: "Colleague", color: "#95a5a6", shirt: "#7f8c8d", pants: "#34495e", hp: 20, xp: 25 }
         ];
 
         // Map Data
         const worldMap = [];
-        const objectMap = []; // Stores objects like desks
-        const enemies = [];   // Visible enemies
+        const objectMap = [];
+        const enemies = [];
 
-        // --- Initialization ---
-        function initMap() {
-            // Generate Map
-            for (let r = 0; r < MAP_ROWS; r++) {
-                const row = [];
-                const objRow = [];
-                for (let c = 0; c < MAP_COLS; c++) {
-                    // Walls on edges
-                    if (r === 0 || r === MAP_ROWS - 1 || c === 0 || c === MAP_COLS - 1) {
-                        row.push(TILE_WALL);
-                        objRow.push(OBJ_NONE);
-                    } else if (r % 5 === 0 && c > 2 && c < MAP_COLS - 3) {
-                         // Cubicle walls
-                         if (c % 4 !== 0) {
-                             row.push(TILE_WALL);
-                             objRow.push(OBJ_NONE);
-                         } else {
-                             row.push(TILE_FLOOR);
-                             objRow.push(OBJ_NONE);
-                         }
-                    } else {
-                        row.push(TILE_FLOOR);
-                        // Random objects
-                        if (Math.random() < 0.05) objRow.push(OBJ_PLANT);
-                        else if (Math.random() < 0.05) objRow.push(OBJ_PRINTER);
-                        else if (Math.random() < 0.1) objRow.push(OBJ_DESK);
-                        else if (Math.random() < 0.1) objRow.push(OBJ_CHAIR);
-                        else objRow.push(OBJ_NONE);
-                    }
+        // --- Drawing Helpers ---
+
+        function circle(ctx, x, y, r, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function roundRect(ctx, x, y, w, h, r, color, stroke) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, r);
+            ctx.fill();
+            if (stroke) {
+                ctx.strokeStyle = stroke;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        function drawCharacter(ctx, x, y, type, scale = 1, isBack = false, animOffset = 0) {
+            const w = 30 * scale;
+            const h = 30 * scale;
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+
+            let skinColor = '#ffdbac';
+            let shirtColor = '#3498db';
+            let pantsColor = '#2c3e50';
+            let hairColor = '#5d4037';
+            let hasTie = true;
+            let hasGlasses = true;
+
+            if (type === "Consultant") {
+                shirtColor = '#f1c40f'; pantsColor = '#34495e'; hairColor = '#f39c12'; hasGlasses = false;
+            } else if (type === "Politician") {
+                shirtColor = '#8e44ad'; pantsColor = '#2c3e50'; hairColor = '#bdc3c7'; hasTie = true;
+            } else if (type === "Citizen") {
+                shirtColor = '#2ecc71'; pantsColor = '#95a5a6'; hasTie = false; hasGlasses = false;
+            } else if (type === "Colleague") {
+                shirtColor = '#95a5a6'; pantsColor = '#34495e';
+            }
+
+            const bob = Math.sin(Date.now() / 200) * (2 * scale);
+            const drawY = y + bob;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(cx, y + h - 2*scale, w/2, h/6, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.fillStyle = shirtColor;
+            ctx.fillRect(x + w*0.2, drawY + h*0.4, w*0.6, h*0.4);
+
+            ctx.fillStyle = pantsColor;
+            ctx.fillRect(x + w*0.25, drawY + h*0.75, w*0.2, h*0.25);
+            ctx.fillRect(x + w*0.55, drawY + h*0.75, w*0.2, h*0.25);
+
+            ctx.fillStyle = skinColor;
+            ctx.beginPath();
+            ctx.arc(cx, drawY + h*0.25, w*0.3, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.fillStyle = hairColor;
+            ctx.beginPath();
+            if (isBack) {
+                ctx.arc(cx, drawY + h*0.25, w*0.32, Math.PI, Math.PI*2); 
+                ctx.fillRect(x + w*0.2, drawY + h*0.25, w*0.6, h*0.2); 
+            } else {
+                ctx.arc(cx, drawY + h*0.22, w*0.32, Math.PI*1.1, Math.PI*1.9);
+            }
+            ctx.fill();
+
+            if (!isBack) {
+                ctx.fillStyle = 'black';
+                if (hasGlasses) {
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 1 * scale;
+                    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                    ctx.fillRect(cx - w*0.15, drawY + h*0.2, w*0.12, h*0.1);
+                    ctx.strokeRect(cx - w*0.15, drawY + h*0.2, w*0.12, h*0.1);
+                    ctx.fillRect(cx + w*0.03, drawY + h*0.2, w*0.12, h*0.1);
+                    ctx.strokeRect(cx + w*0.03, drawY + h*0.2, w*0.12, h*0.1);
+                } else {
+                    ctx.fillRect(cx - w*0.12, drawY + h*0.22, 2*scale, 2*scale);
+                    ctx.fillRect(cx + w*0.08, drawY + h*0.22, 2*scale, 2*scale);
                 }
+
+                if (hasTie) {
+                    ctx.fillStyle = '#c0392b';
+                    ctx.beginPath();
+                    ctx.moveTo(cx, drawY + h*0.4);
+                    ctx.lineTo(cx + w*0.05, drawY + h*0.6);
+                    ctx.lineTo(cx, drawY + h*0.65);
+                    ctx.lineTo(cx - w*0.05, drawY + h*0.6);
+                    ctx.fill();
+                }
+                
+                if (type === "Beamter" || type === "Consultant") {
+                    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                    ctx.lineWidth = 1 * scale;
+                    ctx.beginPath();
+                    ctx.moveTo(cx, drawY + h*0.4);
+                    ctx.lineTo(cx, drawY + h*0.8);
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.fillStyle = shirtColor;
+            ctx.beginPath();
+            ctx.ellipse(x + w*0.1, drawY + h*0.5, w*0.1, h*0.2, 0, 0, Math.PI*2);
+            ctx.ellipse(x + w*0.9, drawY + h*0.5, w*0.1, h*0.2, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawObject(ctx, x, y, type) {
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.fillRect(x + 2, y + TILE_SIZE - 5, TILE_SIZE - 4, 4);
+
+            if (type === OBJ_DESK) {
+                ctx.fillStyle = '#5d4037'; ctx.fillRect(x + 5, y + 15, 5, 20); ctx.fillRect(x + 30, y + 15, 5, 20);
+                ctx.fillStyle = '#8d6e63'; ctx.fillRect(x + 2, y + 10, 36, 12);
+                ctx.fillStyle = '#795548'; ctx.fillRect(x + 2, y + 22, 36, 3);
+                ctx.fillStyle = 'white'; ctx.fillRect(x + 8, y + 12, 8, 6);
+                ctx.fillStyle = '#ddd'; ctx.fillRect(x + 10, y + 11, 8, 6);
+            } else if (type === OBJ_CHAIR) {
+                ctx.fillStyle = '#333'; ctx.fillRect(x + 12, y + 25, 3, 10); ctx.fillRect(x + 25, y + 25, 3, 10);
+                ctx.fillStyle = '#222'; ctx.fillRect(x + 10, y + 20, 20, 5);
+                ctx.fillStyle = '#111'; ctx.fillRect(x + 10, y + 5, 20, 15);
+            } else if (type === OBJ_PLANT) {
+                ctx.fillStyle = '#d35400';
+                ctx.beginPath(); ctx.moveTo(x + 10, y + 35); ctx.lineTo(x + 30, y + 35); ctx.lineTo(x + 32, y + 20); ctx.lineTo(x + 8, y + 20); ctx.fill();
+                circle(ctx, x + 20, y + 15, 8, '#27ae60'); circle(ctx, x + 12, y + 18, 6, '#2ecc71'); circle(ctx, x + 28, y + 18, 6, '#2ecc71'); circle(ctx, x + 20, y + 8, 7, '#2ecc71');
+            } else if (type === OBJ_PRINTER) {
+                ctx.fillStyle = '#bdc3c7'; ctx.fillRect(x + 5, y + 10, 30, 20);
+                ctx.fillStyle = '#7f8c8d'; ctx.fillRect(x + 5, y + 10, 30, 5);
+                ctx.fillStyle = 'white'; ctx.beginPath(); ctx.moveTo(x + 10, y + 10); ctx.lineTo(x + 15, y + 5); ctx.lineTo(x + 25, y + 5); ctx.lineTo(x + 30, y + 10); ctx.fill();
+                ctx.fillStyle = '#2ecc71'; ctx.fillRect(x + 28, y + 12, 3, 3);
+            }
+        }
+
+        // --- Maze & Map Generation ---
+        
+        function initMap() {
+            // 1. Initialize with walls
+            worldMap.length = 0;
+            objectMap.length = 0;
+            enemies.length = 0;
+
+            for (let r = 0; r < MAP_ROWS; r++) {
+                const row = new Array(MAP_COLS).fill(TILE_WALL);
+                const objRow = new Array(MAP_COLS).fill(OBJ_NONE);
                 worldMap.push(row);
                 objectMap.push(objRow);
             }
 
-            // Ensure player spawn area is clear
-            const startR = Math.floor(player.y / TILE_SIZE);
-            const startC = Math.floor(player.x / TILE_SIZE);
-            if (objectMap[startR] && objectMap[startR][startC]) objectMap[startR][startC] = OBJ_NONE;
-            if (objectMap[startR] && objectMap[startR][startC+1]) objectMap[startR][startC+1] = OBJ_NONE;
-            if (objectMap[startR+1] && objectMap[startR+1][startC]) objectMap[startR+1][startC] = OBJ_NONE;
-            if (objectMap[startR+1] && objectMap[startR+1][startC+1]) objectMap[startR+1][startC+1] = OBJ_NONE;
+            // 2. Generate Maze (Recursive Backtracker)
+            // We use odd coordinates for cells to ensure walls between them
+            const stack = [];
+            const startR = 1;
+            const startC = 1;
+            
+            worldMap[startR][startC] = TILE_FLOOR;
+            stack.push({r: startR, c: startC});
 
-            // Spawn Enemies
+            while (stack.length > 0) {
+                const current = stack[stack.length - 1];
+                const neighbors = [];
+
+                // Check neighbors 2 steps away
+                const directions = [
+                    {dr: -2, dc: 0}, // Up
+                    {dr: 2, dc: 0},  // Down
+                    {dr: 0, dc: -2}, // Left
+                    {dr: 0, dc: 2}   // Right
+                ];
+
+                for (let d of directions) {
+                    const nr = current.r + d.dr;
+                    const nc = current.c + d.dc;
+
+                    // Bounds check (keep 1 tile border)
+                    if (nr > 0 && nr < MAP_ROWS - 1 && nc > 0 && nc < MAP_COLS - 1) {
+                        if (worldMap[nr][nc] === TILE_WALL) {
+                            neighbors.push({r: nr, c: nc, linkR: current.r + d.dr/2, linkC: current.c + d.dc/2});
+                        }
+                    }
+                }
+
+                if (neighbors.length > 0) {
+                    const next = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    // Carve path
+                    worldMap[next.linkR][next.linkC] = TILE_FLOOR;
+                    worldMap[next.r][next.c] = TILE_FLOOR;
+                    stack.push({r: next.r, c: next.c});
+                } else {
+                    stack.pop();
+                }
+            }
+
+            // 3. Mark Original Paths (The Golden Path)
+            // We will NEVER place solid objects on these tiles
+            const isPath = worldMap.map(row => [...row]);
+
+            // 4. Carve "Office Rooms" (Open spaces)
+            const numRooms = 5;
+            for (let i = 0; i < numRooms; i++) {
+                const w = Math.floor(Math.random() * 3) + 3; // Width 3-5
+                const h = Math.floor(Math.random() * 3) + 3; // Height 3-5
+                const r = Math.floor(Math.random() * (MAP_ROWS - h - 2)) + 1;
+                const c = Math.floor(Math.random() * (MAP_COLS - w - 2)) + 1;
+
+                for (let rr = r; rr < r + h; rr++) {
+                    for (let cc = c; cc < c + w; cc++) {
+                        // Keep track of what it was before we touch it
+                        const wasWall = worldMap[rr][cc] === TILE_WALL;
+                        
+                        worldMap[rr][cc] = TILE_FLOOR;
+                        
+                        // Smart Object Placement
+                        if (wasWall) {
+                             if (Math.random() < 0.4) {
+                                const roll = Math.random();
+                                if (roll < 0.4) objectMap[rr][cc] = OBJ_DESK;
+                                else if (roll < 0.6) objectMap[rr][cc] = OBJ_CHAIR;
+                                else if (roll < 0.8) objectMap[rr][cc] = OBJ_PLANT;
+                                else objectMap[rr][cc] = OBJ_PRINTER;
+                            } else {
+                                objectMap[rr][cc] = OBJ_NONE;
+                            }
+                        } else {
+                            objectMap[rr][cc] = OBJ_NONE;
+                        }
+                    }
+                }
+            }
+
+            // 5. Ensure Player Spawn is valid
+            // Find first floor tile
+            let spawnFound = false;
+            for(let r=1; r<MAP_ROWS; r++) {
+                for(let c=1; c<MAP_COLS; c++) {
+                    if(worldMap[r][c] === TILE_FLOOR && objectMap[r][c] === OBJ_NONE) {
+                        player.x = c * TILE_SIZE + 5;
+                        player.y = r * TILE_SIZE + 5;
+                        // Clear spawn area
+                        objectMap[r][c] = OBJ_NONE;
+                        if (c+1 < MAP_COLS) objectMap[r][c+1] = OBJ_NONE;
+                        spawnFound = true;
+                        break;
+                    }
+                }
+                if(spawnFound) break;
+            }
+
+            // 6. Spawn Enemies
             for (let i = 0; i < 10; i++) {
                 spawnEnemy();
             }
@@ -248,24 +500,27 @@
 
         function spawnEnemy() {
             let placed = false;
-            while (!placed) {
+            let attempts = 0;
+            while (!placed && attempts < 100) {
                 const r = Math.floor(Math.random() * (MAP_ROWS - 2)) + 1;
                 const c = Math.floor(Math.random() * (MAP_COLS - 2)) + 1;
                 const x = c * TILE_SIZE + 5;
                 const y = r * TILE_SIZE + 5;
+                attempts++;
 
-                // Check collision with walls/objects
                 if (worldMap[r][c] !== TILE_WALL && objectMap[r][c] === OBJ_NONE) {
-                    // Simple check against player
                     const dx = x - player.x;
                     const dy = y - player.y;
                     if (dx*dx + dy*dy > 10000) {
                         const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
                         enemies.push({
                             ...type,
+                            type: type.name === "Consultant" ? "Consultant" : 
+                                  type.name === "Politician" ? "Politician" :
+                                  type.name === "Citizen" ? "Citizen" : "Colleague",
                             x: x,
                             y: y,
-                            maxHp: type.hp, // Base stats
+                            maxHp: type.hp,
                             id: Math.random()
                         });
                         placed = true;
@@ -278,7 +533,6 @@
 
         // --- Input Handling ---
 
-        // Keyboard
         window.addEventListener('keydown', (e) => {
             if (keys[e.key]) return;
             keys[e.key] = true;
@@ -347,7 +601,6 @@
              const key = btn.getAttribute('data-key');
              const trigger = () => {
                  if (currentState === STATE_BATTLE) handleBattleInput(key);
-                 // Simulate key press for checks
                  keys[key] = true;
                  setTimeout(() => keys[key] = false, 100);
              };
@@ -368,12 +621,35 @@
         function update(dt) {
             if (currentState === STATE_WORLD) updateWorld(dt);
             else if (currentState === STATE_BATTLE) updateBattleJoystick(dt);
+            
+            if (shakeAmount > 0) {
+                shakeAmount -= dt * 30;
+                if (shakeAmount < 0) shakeAmount = 0;
+            }
+            if (battleCooldown > 0) {
+                battleCooldown -= dt;
+            }
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.save();
+            if (shakeAmount > 0) {
+                const dx = (Math.random() - 0.5) * shakeAmount;
+                const dy = (Math.random() - 0.5) * shakeAmount;
+                ctx.translate(dx, dy);
+            }
+
             if (currentState === STATE_WORLD) drawWorld();
             else if (currentState === STATE_BATTLE) drawBattle();
+
+            ctx.restore();
+            
+            if (shakeAmount > 5) {
+                ctx.fillStyle = `rgba(255, 0, 0, ${shakeAmount / 40})`;
+                ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+            }
         }
 
         function getTitle(level) {
@@ -386,20 +662,16 @@
             joystickTimer -= dt;
             if (joystickTimer > 0) return;
 
-            // Threshold for joystick direction
             if (joystickVector.y < -0.5) {
-                // Up
                 handleBattleInput('ArrowUp');
-                joystickTimer = 0.3; // 300ms cooldown
+                joystickTimer = 0.3;
             } else if (joystickVector.y > 0.5) {
-                // Down
                 handleBattleInput('ArrowDown');
                 joystickTimer = 0.3;
             }
         }
 
         function updateWorld(dt) {
-            // Calculate movement vector from Keys + Joystick
             let dx = joystickVector.x;
             let dy = joystickVector.y;
 
@@ -408,7 +680,6 @@
             if (keys['ArrowLeft']) dx = -1;
             if (keys['ArrowRight']) dx = 1;
 
-            // Normalize if needed (simple clamp for now)
             const len = Math.sqrt(dx*dx + dy*dy);
             if (len > 1) { dx /= len; dy /= len; }
 
@@ -416,16 +687,14 @@
                 const nextX = player.x + dx * player.speed * dt;
                 const nextY = player.y + dy * player.speed * dt;
 
-                // Collision Detection (AABB vs Tiles/Objects)
                 if (!checkCollision(nextX, player.y)) player.x = nextX;
                 if (!checkCollision(player.x, nextY)) player.y = nextY;
             }
 
-            // Check Enemy Proximity
             for (let i = 0; i < enemies.length; i++) {
                 const enemy = enemies[i];
                 const dist = Math.sqrt((player.x - enemy.x)**2 + (player.y - enemy.y)**2);
-                if (dist < 40) { // Trigger range
+                if (dist < 40 && battleCooldown <= 0) { 
                     startBattle(enemy, i);
                     break;
                 }
@@ -433,7 +702,6 @@
         }
 
         function checkCollision(x, y) {
-            // Check 4 corners of player
             const points = [
                 { x: x, y: y },
                 { x: x + player.width, y: y },
@@ -445,75 +713,88 @@
                 const c = Math.floor(p.x / TILE_SIZE);
                 const r = Math.floor(p.y / TILE_SIZE);
 
-                if (c < 0 || c >= MAP_COLS || r < 0 || r >= MAP_ROWS) return true; // Out of bounds
+                if (c < 0 || c >= MAP_COLS || r < 0 || r >= MAP_ROWS) return true;
                 if (worldMap[r][c] === TILE_WALL) return true;
-                if (objectMap[r][c] !== OBJ_NONE) return true; // Collide with objects
+                // Only collide with objects if they are solid?
+                // For simplicity, yes, objects are solid.
+                if (objectMap[r][c] !== OBJ_NONE) return true;
             }
             return false;
         }
 
         function drawWorld() {
-            // Draw Tiles & Objects
             for (let r = 0; r < MAP_ROWS; r++) {
                 for (let c = 0; c < MAP_COLS; c++) {
                     const x = c * TILE_SIZE;
                     const y = r * TILE_SIZE;
 
-                    // Floor
                     ctx.fillStyle = COLOR_FLOOR;
                     ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-                    ctx.strokeStyle = '#ddd';
+                    
+                    ctx.fillStyle = 'rgba(0,0,0,0.03)';
+                    if ((r+c)%2 === 0) ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+
+                    ctx.strokeStyle = '#d0d0d0';
+                    ctx.lineWidth = 1;
                     ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
 
-                    // Walls
                     if (worldMap[r][c] === TILE_WALL) {
                         ctx.fillStyle = COLOR_WALL;
                         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+                        ctx.fillStyle = '#444';
+                        ctx.fillRect(x, y + TILE_SIZE - 5, TILE_SIZE, 5);
                     }
 
-                    // Objects
                     const obj = objectMap[r][c];
                     if (obj !== OBJ_NONE) {
-                        if (obj === OBJ_DESK) {
-                             ctx.fillStyle = '#8B4513'; // Brown Desk
-                             ctx.fillRect(x+5, y+10, 30, 20);
-                        } else if (obj === OBJ_CHAIR) {
-                             ctx.fillStyle = '#000000'; // Chair
-                             ctx.fillRect(x+10, y+10, 20, 20);
-                        } else if (obj === OBJ_PLANT) {
-                             ctx.fillStyle = '#006400'; // Green Plant
-                             ctx.beginPath();
-                             ctx.arc(x+20, y+20, 10, 0, Math.PI*2);
-                             ctx.fill();
-                        } else if (obj === OBJ_PRINTER) {
-                             ctx.fillStyle = '#dddddd'; // Printer
-                             ctx.fillRect(x+5, y+5, 30, 30);
-                        }
+                        drawObject(ctx, x, y, obj);
                     }
                 }
             }
 
-            // Draw Enemies
             enemies.forEach(e => {
-                ctx.fillStyle = e.color;
-                ctx.fillRect(e.x, e.y, e.width, e.height);
-                // Name tag
+                drawCharacter(ctx, e.x, e.y, e.type, 1, false);
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(e.x - 5, e.y - 12, e.width + 10, 10);
                 ctx.fillStyle = 'white';
-                ctx.font = '10px Arial';
-                ctx.fillText(e.name, e.x, e.y - 5);
+                ctx.font = 'bold 8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(e.name, e.x + e.width/2, e.y - 4);
             });
 
-            // Draw Player
-            ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
-
-            // UI Overlay
-            ctx.fillStyle = 'rgba(0,0,0,0.7)';
-            ctx.fillRect(0, 0, 260, 60);
-            ctx.fillStyle = 'white';
+            drawCharacter(ctx, player.x, player.y, player.type, 1, false);
+            
+            ctx.textAlign = 'left';
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(10, 10, 280, 70);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(10, 10, 280, 70);
+            
+            ctx.fillStyle = '#fff';
             ctx.font = '16px Courier New';
-            ctx.fillText(`${getTitle(player.level)} (Lvl ${player.level})`, 10, 20);
-            ctx.fillText(`HP: ${player.hp}/${player.maxHp} | XP: ${player.xp}/${player.nextLevelXp}`, 10, 40);
+            ctx.fillText(`${getTitle(player.level)} (Lvl ${player.level})`, 20, 35);
+            
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(20, 45, 100, 8);
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillRect(20, 45, 100 * (player.hp / player.maxHp), 8);
+            
+            ctx.fillStyle = '#7f8c8d';
+            ctx.fillRect(130, 45, 100, 8);
+            ctx.fillStyle = '#3498db';
+            ctx.fillRect(130, 45, 100 * (player.xp / player.nextLevelXp), 8);
+            
+            ctx.font = '10px Courier New';
+            ctx.fillStyle = '#fff';
+            ctx.fillText(`HP: ${player.hp}/${player.maxHp}`, 20, 65);
+            ctx.fillText(`XP: ${player.xp}/${player.nextLevelXp}`, 130, 65);
+
+            if (battleCooldown > 0) {
+                ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+                ctx.font = 'bold 20px Courier New';
+                ctx.fillText("SAFE!", player.x - 10, player.y - 10);
+            }
         }
 
         // --- Battle System ---
@@ -523,7 +804,6 @@
             currentState = STATE_BATTLE;
             currentEnemyIndex = index;
 
-            // Scale stats based on level difference or just simple scaling
             const levelScale = 1 + (player.level - 1) * 0.2;
 
             battleState = {
@@ -540,7 +820,6 @@
                 turn: 'PLAYER'
             };
 
-            // Stop movement
             joystickVector = { x: 0, y: 0 };
             keys['ArrowUp'] = false; keys['ArrowDown'] = false;
             keys['ArrowLeft'] = false; keys['ArrowRight'] = false;
@@ -557,8 +836,41 @@
                         battleState.log = "Select Attack:";
                     } else if (battleState.menuSelection === 1) attemptCatch();
                     else if (battleState.menuSelection === 2) {
-                        battleState.log = "Ran away!";
-                        battleState.phase = 'END';
+                        if (Math.random() < 0.5) {
+                            battleState.log = "Ran away safely!";
+                            
+                            // Step Back Logic
+                            const enemy = battleState.enemy;
+                            // Vector from enemy to player
+                            let dx = player.x - enemy.x;
+                            let dy = player.y - enemy.y;
+                            let dist = Math.sqrt(dx*dx + dy*dy);
+                            
+                            if (dist > 0) {
+                                // Move 60px away (approx 1.5 tiles)
+                                const stepDist = 60;
+                                const moveX = (dx / dist) * stepDist;
+                                const moveY = (dy / dist) * stepDist;
+                                const newX = player.x + moveX;
+                                const newY = player.y + moveY;
+                                
+                                // Simple boundary check (or wall check)
+                                // We trust checkCollision to prevent wall clipping
+                                if (!checkCollision(newX, newY)) {
+                                    player.x = newX;
+                                    player.y = newY;
+                                }
+                            }
+                            
+                            // Add Cooldown so we don't immediately re-fight
+                            battleCooldown = 2.0;
+
+                            battleState.phase = 'END';
+                        } else {
+                            battleState.log = "Failed to run!";
+                            battleState.phase = 'BATTLE_ANIMATION';
+                            setTimeout(enemyTurn, 1000);
+                        }
                     }
                 }
             } else if (battleState.phase === 'ATTACK_SELECT') {
@@ -568,14 +880,13 @@
                     battleState.phase = 'MENU';
                     battleState.log = "What will you do?";
                 }
-                if (key === 'Enter' || key === ' ') performAttack(ATTACKS[battleState.attackSelection]);
+                if (key === 'Enter' || key === ' ') performAttack(PLAYER_ATTACKS[battleState.attackSelection]);
             } else if (battleState.phase === 'END' || battleState.phase === 'LEVEL_UP') {
                  if (key === 'Enter' || key === ' ') {
                      if (battleState.enemy.hp <= 0 || battleState.phase === 'LEVEL_UP') {
-                         // Remove enemy
                          if (currentEnemyIndex > -1) {
                              enemies.splice(currentEnemyIndex, 1);
-                             spawnEnemy(); // Spawn new one to keep world populated
+                             spawnEnemy(); 
                          }
                      }
                      currentState = STATE_WORLD;
@@ -584,6 +895,15 @@
         }
 
         function performAttack(attack) {
+            if (attack.heal) {
+                const healAmt = 5 + Math.floor(player.level);
+                player.hp = Math.min(player.maxHp, player.hp + healAmt);
+                battleState.log = `Drank Coffee! +${healAmt} HP.`;
+                battleState.phase = 'BATTLE_ANIMATION';
+                setTimeout(enemyTurn, 1000);
+                return;
+            }
+
             let damage = attack.damage + Math.floor(player.level / 2);
             if (player.consultants > 0) damage += player.consultants;
 
@@ -605,7 +925,7 @@
                     player.consultants++;
                     battleState.log = "Hired Consultant!";
                     battleState.phase = 'END';
-                    battleState.enemy.hp = 0; // Considered defeated/removed
+                    battleState.enemy.hp = 0; 
                 } else {
                     battleState.log = "Offer refused!";
                     battleState.phase = 'BATTLE_ANIMATION';
@@ -620,16 +940,27 @@
 
         function enemyTurn() {
             if (currentState !== STATE_BATTLE) return;
-            const damage = Math.max(1, Math.floor(player.level * 1.5) - 2);
+            
+            const moves = ENEMY_MOVES[battleState.enemy.type] || ENEMY_MOVES["Consultant"];
+            const move = moves[Math.floor(Math.random() * moves.length)];
+            
+            const levelScale = 1 + (player.level * 0.1);
+            let damage = Math.floor(move.damage * levelScale);
+            
+            damage = Math.floor(damage * (0.8 + Math.random() * 0.4));
+            if (damage < 1) damage = 1;
+
             player.hp -= damage;
-            battleState.log = `${battleState.enemy.name} attacks! -${damage} HP.`;
+            battleState.log = `${battleState.enemy.name} used ${move.name}! -${damage} HP.`;
+            
+            shakeAmount = 20;
 
             if (player.hp <= 0) {
                 player.hp = 0;
                 battleState.phase = 'END';
                 battleState.log = "Burnout! (Press A)";
                 player.hp = player.maxHp;
-                player.x = 100; player.y = 100; // Respawn
+                player.x = 100; player.y = 100; 
             } else {
                 battleState.phase = 'MENU';
             }
@@ -654,56 +985,61 @@
         }
 
         function drawBattle() {
-             // Background
-            ctx.fillStyle = '#222';
+            const grad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT);
+            grad.addColorStop(0, '#2c3e50');
+            grad.addColorStop(1, '#000000');
+            ctx.fillStyle = grad;
             ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-            // Battle Arena Area
-            ctx.fillStyle = '#eee';
-            ctx.fillRect(50, 50, 700, 350);
+            ctx.fillStyle = '#7f8c8d';
+            ctx.beginPath();
+            ctx.ellipse(SCREEN_WIDTH/2, 350, 350, 100, 0, 0, Math.PI*2);
+            ctx.fill();
 
-            // Enemy
             const enemy = battleState.enemy;
-            ctx.fillStyle = enemy.color;
-            ctx.fillRect(500, 100, 100, 100);
+            drawCharacter(ctx, 500, 100, enemy.type, 4, false);
 
-            // Enemy Stats
-            ctx.fillStyle = 'black';
-            ctx.font = '20px Courier New';
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 24px Courier New';
             ctx.textAlign = 'left';
-            ctx.fillText(`${enemy.name}`, 450, 80);
-            ctx.fillStyle = 'red';
-            ctx.fillRect(450, 90, 200, 10);
-            ctx.fillStyle = 'green';
-            ctx.fillRect(450, 90, 200 * (enemy.hp / enemy.maxHp), 10);
+            ctx.fillText(`${enemy.name} (Lvl ${player.level})`, 450, 80);
+            
+            ctx.fillStyle = '#555';
+            ctx.beginPath();
+            ctx.roundRect(450, 90, 200, 15, 5);
+            ctx.fill();
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath();
+            ctx.roundRect(450, 90, 200 * (enemy.hp / enemy.maxHp), 15, 5);
+            ctx.fill();
 
-            // Player (Back view representation)
-            ctx.fillStyle = player.color;
-            ctx.fillRect(150, 250, 100, 100);
+            drawCharacter(ctx, 150, 200, player.type, 4, true);
 
-            // Player Stats
-            ctx.fillStyle = 'black';
-            ctx.fillText(`${getTitle(player.level)}`, 150, 230);
-             ctx.fillStyle = 'red';
-            ctx.fillRect(150, 240, 200, 10);
-            ctx.fillStyle = 'green';
-            ctx.fillRect(150, 240, 200 * (player.hp / player.maxHp), 10);
-            ctx.fillStyle = 'black';
-            ctx.fillText(`${player.hp}/${player.maxHp}`, 360, 250);
+            ctx.fillStyle = 'white';
+            ctx.fillText(`${getTitle(player.level)}`, 100, 230);
+            
+            ctx.fillStyle = '#555';
+            ctx.beginPath();
+            ctx.roundRect(100, 240, 200, 15, 5);
+            ctx.fill();
+            ctx.fillStyle = '#2ecc71';
+            ctx.beginPath();
+            ctx.roundRect(100, 240, 200 * (player.hp / player.maxHp), 15, 5);
+            ctx.fill();
+            
+            ctx.font = '16px Courier New';
+            ctx.fillText(`${player.hp} / ${player.maxHp} HP`, 100, 275);
 
-            // Menu / Dialog Box
             ctx.fillStyle = COLOR_MENU_BG;
             ctx.fillRect(0, 400, SCREEN_WIDTH, 200);
             ctx.strokeStyle = COLOR_MENU_BORDER;
             ctx.lineWidth = 4;
             ctx.strokeRect(5, 405, SCREEN_WIDTH - 10, 190);
 
-            // Text
             ctx.fillStyle = 'white';
             ctx.font = '24px Courier New';
             ctx.fillText(battleState.log, 30, 450);
 
-            // Menu Options
             const startX = 500;
             const startY = 480;
 
@@ -711,7 +1047,7 @@
                 const options = ["FIGHT", "HIRE", "RUN"];
                 options.forEach((opt, index) => {
                     if (index === battleState.menuSelection) {
-                        ctx.fillStyle = '#ffff00';
+                        ctx.fillStyle = '#f1c40f';
                         ctx.fillText(`> ${opt}`, startX, startY + index * 40);
                     } else {
                         ctx.fillStyle = 'white';
@@ -719,9 +1055,9 @@
                     }
                 });
             } else if (battleState.phase === 'ATTACK_SELECT') {
-                ATTACKS.forEach((att, index) => {
+                PLAYER_ATTACKS.forEach((att, index) => {
                     if (index === battleState.attackSelection) {
-                         ctx.fillStyle = '#ffff00';
+                         ctx.fillStyle = '#f1c40f';
                         ctx.fillText(`> ${att.name}`, startX, startY + index * 30 - 20);
                     } else {
                          ctx.fillStyle = 'white';
@@ -729,7 +1065,7 @@
                     }
                 });
             } else if (battleState.phase === 'END' || battleState.phase === 'LEVEL_UP') {
-                 ctx.fillStyle = '#ffff00';
+                 ctx.fillStyle = '#f1c40f';
                  ctx.fillText("Press A to continue...", startX, startY + 40);
             }
         }
@@ -738,3 +1074,4 @@
     </script>
 </body>
 </html>
+
