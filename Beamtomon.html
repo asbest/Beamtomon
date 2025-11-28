@@ -277,7 +277,7 @@
             speed: 200,
             color: '#3498db',
             type: "Beamter",
-            dept: FACT_OFFICER, // Player Faction
+            dept: FACT_OFFICER, 
             level: 1,
             hp: 20,
             maxHp: 20,
@@ -286,7 +286,8 @@
             score: 0,
             consultants: 0,
             inventory: { donuts: 1 },
-            status: null
+            status: null,
+            isWalking: false // NEW
         };
 
         let coffeeMachineLoc = { x: 0, y: 0 };
@@ -298,7 +299,7 @@
         // Attack Types
         const PLAYER_ATTACKS = [
             { name: "Permission Denied", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }, 
-            { name: "Pass the Buck", damage: 6, type: FACT_POLITICIAN }, // Deflection is political
+            { name: "Pass the Buck", damage: 6, type: FACT_POLITICIAN },
             { name: "Item", isItem: true },
             { name: "Form A38", damage: 8, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.3 } 
         ];
@@ -312,7 +313,7 @@
             ],
             "Politician": [
                 { name: "Empty Promise", damage: 2, type: FACT_POLITICIAN },
-                { name: "Tax Hike", damage: 7, type: FACT_OFFICER }, // Taxes use officers
+                { name: "Tax Hike", damage: 7, type: FACT_OFFICER },
                 { name: "Filibuster", damage: 4, type: FACT_POLITICIAN, effect: "STUN", chance: 0.5 },
                 { name: "Scandal", damage: 8, type: FACT_POLITICIAN }
             ],
@@ -363,11 +364,25 @@
             }
         }
 
-        function drawCharacter(ctx, x, y, type, scale = 1, isBack = false, animOffset = 0, status = null) {
+        function drawCharacter(ctx, x, y, type, scale = 1, isBack = false, animOffset = 0, status = null, isWalking = false) {
             const w = 30 * scale;
             const h = 30 * scale;
             const cx = x + w / 2;
-            const drawY = y + Math.sin(Date.now() / 200) * (2 * scale);
+            
+            // Animation Calculations
+            const bobSpeed = isWalking ? 100 : 250;
+            const bobAmt = isWalking ? 3 : 1;
+            const drawY = y + Math.sin(Date.now() / bobSpeed) * (bobAmt * scale);
+
+            // Leg Animation
+            let legOffsetL = 0;
+            let legOffsetR = 0;
+            if (isWalking) {
+                const walkSpeed = 10;
+                const t = Date.now() / 100;
+                legOffsetL = Math.sin(t) * (3 * scale);
+                legOffsetR = Math.sin(t + Math.PI) * (3 * scale);
+            }
 
             let skinColor = '#ffdbac';
             let shirtColor = '#3498db';
@@ -387,6 +402,7 @@
             }
 
             ctx.save();
+            // Shadow
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath();
             ctx.ellipse(cx, y + h - 2*scale, w/2, h/6, 0, 0, Math.PI*2);
@@ -400,9 +416,10 @@
             ctx.fillStyle = shirtColor;
             ctx.fillRect(x + w*0.2, drawY + h*0.4, w*0.6, h*0.4);
 
+            // Legs with walking offset
             ctx.fillStyle = pantsColor;
-            ctx.fillRect(x + w*0.25, drawY + h*0.75, w*0.2, h*0.25);
-            ctx.fillRect(x + w*0.55, drawY + h*0.75, w*0.2, h*0.25);
+            ctx.fillRect(x + w*0.25, drawY + h*0.75 + legOffsetL, w*0.2, h*0.25);
+            ctx.fillRect(x + w*0.55, drawY + h*0.75 + legOffsetR, w*0.2, h*0.25);
 
             ctx.fillStyle = skinColor;
             ctx.beginPath();
@@ -445,10 +462,13 @@
                 }
             }
             
+            // Arms
             ctx.fillStyle = shirtColor;
             ctx.beginPath();
-            ctx.ellipse(x + w*0.1, drawY + h*0.5, w*0.1, h*0.2, 0, 0, Math.PI*2);
-            ctx.ellipse(x + w*0.9, drawY + h*0.5, w*0.1, h*0.2, 0, 0, Math.PI*2);
+            // Swing arms if walking
+            const armSwing = isWalking ? Math.sin(Date.now() / 100) * (3*scale) : 0;
+            ctx.ellipse(x + w*0.1, drawY + h*0.5 + armSwing, w*0.1, h*0.2, 0, 0, Math.PI*2);
+            ctx.ellipse(x + w*0.9, drawY + h*0.5 - armSwing, w*0.1, h*0.2, 0, 0, Math.PI*2);
             ctx.fill();
             
             ctx.filter = 'none';
@@ -903,8 +923,16 @@
                     }
                 }
 
-                if (!checkCollision(nextX, player.y)) player.x = nextX;
-                if (!checkCollision(player.x, nextY)) player.y = nextY;
+                if (!checkCollision(nextX, player.y)) {
+                    player.x = nextX;
+                }
+                if (!checkCollision(player.x, nextY)) {
+                    player.y = nextY;
+                }
+                
+                player.isWalking = true;
+            } else {
+                player.isWalking = false;
             }
 
             for (let i = 0; i < enemies.length; i++) {
@@ -989,7 +1017,7 @@
                 ctx.fillText(e.name, e.x + e.width/2, e.y - 4);
             });
 
-            drawCharacter(ctx, player.x, player.y, player.type, 1, false, 0, player.status);
+            drawCharacter(ctx, player.x, player.y, player.type, 1, false, 0, player.status, player.isWalking);
             
             // HUD
             ctx.textAlign = 'left';
@@ -1128,7 +1156,7 @@
                      currentState = STATE_WORLD;
                  }
             } else if (battleState.phase === 'GAME_OVER') {
-                 // handled by modal
+                 // Nothing specific, handled by modal
             }
         }
 
