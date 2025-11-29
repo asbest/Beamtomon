@@ -795,8 +795,6 @@
              btn.addEventListener('mousedown', (e) => { e.preventDefault(); trigger(); });
         });
 
-        document.getElementById('restart-btn').addEventListener('click', restartGame);
-        
         // --- Buttons ---
         function bindButton(btn, callback) {
             if (!btn) return;
@@ -817,9 +815,11 @@
         const loadBtn = document.getElementById('load-btn');
         const quitBtn = document.getElementById('quit-btn');
         const toastMsg = document.getElementById('toast-msg');
+        const restartBtn = document.getElementById('restart-btn');
 
         bindButton(pauseBtn, togglePause);
         bindButton(resumeBtn, togglePause);
+        bindButton(restartBtn, restartGame);
         
         function showToast(msg) {
             toastMsg.innerText = msg;
