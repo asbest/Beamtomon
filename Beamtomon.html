@@ -795,8 +795,6 @@
              btn.addEventListener('mousedown', (e) => { e.preventDefault(); trigger(); });
         });
 
-        document.getElementById('restart-btn').addEventListener('click', restartGame);
-        
         // --- Buttons ---
         function bindButton(btn, callback) {
             if (!btn) return;
@@ -817,9 +815,11 @@
         const loadBtn = document.getElementById('load-btn');
         const quitBtn = document.getElementById('quit-btn');
         const toastMsg = document.getElementById('toast-msg');
+        const restartBtn = document.getElementById('restart-btn');
 
         bindButton(pauseBtn, togglePause);
         bindButton(resumeBtn, togglePause);
+        bindButton(restartBtn, restartGame);
         
         function showToast(msg) {
             toastMsg.innerText = msg;
@@ -946,6 +946,16 @@
             if (shakeAmount > 5) {
                 ctx.fillStyle = `rgba(255, 0, 0, ${shakeAmount / 40})`;
                 ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+            }
+        }
+
+        function drawRoundedRect(ctx, x, y, width, height, radius) {
+            if (ctx.roundRect) {
+                ctx.beginPath();
+                ctx.roundRect(x, y, width, height, radius);
+            } else {
+                ctx.beginPath();
+                ctx.rect(x, y, width, height);
             }
         }
 
@@ -1790,12 +1800,10 @@
             ctx.fillText(`Faction: ${enemy.dept}`, 450, 100); 
             
             ctx.fillStyle = '#555';
-            ctx.beginPath();
-            ctx.roundRect(450, 110, 200, 15, 5);
+            drawRoundedRect(ctx, 450, 110, 200, 15, 5);
             ctx.fill();
             ctx.fillStyle = '#e74c3c';
-            ctx.beginPath();
-            ctx.roundRect(450, 110, 200 * (enemy.hp / enemy.maxHp), 15, 5);
+            drawRoundedRect(ctx, 450, 110, 200 * (enemy.hp / enemy.maxHp), 15, 5);
             ctx.fill();
 
             const fighter = getActiveFighter();
@@ -1809,12 +1817,10 @@
             ctx.fillText(`Faction: ${fighter.dept || FACT_OFFICER}`, 100, 250); 
             
             ctx.fillStyle = '#555';
-            ctx.beginPath();
-            ctx.roundRect(100, 260, 200, 15, 5);
+            drawRoundedRect(ctx, 100, 260, 200, 15, 5);
             ctx.fill();
             ctx.fillStyle = '#2ecc71';
-            ctx.beginPath();
-            ctx.roundRect(100, 260, 200 * (fighter.hp / fighter.maxHp), 15, 5);
+            drawRoundedRect(ctx, 100, 260, 200 * (fighter.hp / fighter.maxHp), 15, 5);
             ctx.fill();
             
             ctx.fillStyle = 'white';
@@ -1822,17 +1828,17 @@
             ctx.fillText(`${fighter.hp} / ${fighter.maxHp} HP`, 100, 295);
 
             ctx.fillStyle = COLOR_MENU_BG;
-            ctx.fillRect(0, 400, SCREEN_WIDTH, 200);
+            ctx.fillRect(0, 360, SCREEN_WIDTH, 240);
             ctx.strokeStyle = COLOR_MENU_BORDER;
             ctx.lineWidth = 4;
-            ctx.strokeRect(5, 405, SCREEN_WIDTH - 10, 190);
+            ctx.strokeRect(5, 365, SCREEN_WIDTH - 10, 230);
 
             ctx.fillStyle = 'white';
             ctx.font = '24px Courier New';
-            ctx.fillText(battleState.log, 30, 450);
+            ctx.fillText(battleState.log, 30, 400);
 
             const startX = 500;
-            const startY = 480;
+            const startY = 420;
 
             if (battleState.phase === 'MESSAGE') {
                  ctx.fillStyle = '#f1c40f'; 
