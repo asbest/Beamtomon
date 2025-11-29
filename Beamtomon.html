@@ -1551,7 +1551,7 @@
                     useItem("Donut");
                 }
             } else if (battleState.phase === 'SWITCH_SELECT') {
-                const count = player.consultants.length + 1; 
+                const count = player.consultants.length + 2;
                 if (key === 'ArrowUp') battleState.consultantSelection = (battleState.consultantSelection - 1 + count) % count;
                 if (key === 'ArrowDown') battleState.consultantSelection = (battleState.consultantSelection + 1) % count;
                 if (key === 'Escape') {
@@ -1559,6 +1559,11 @@
                     battleState.log = "Action?";
                 }
                 if (key === 'Enter' || key === ' ') {
+                    if (battleState.consultantSelection === count - 1) {
+                        battleState.phase = 'MENU';
+                        battleState.log = "Action?";
+                        return;
+                    }
                     let targetIndex = battleState.consultantSelection - 1; 
                     let targetFighter = (targetIndex === -1) ? player : player.consultants[targetIndex];
                     if (targetFighter.hp <= 0) {
@@ -1940,6 +1945,14 @@
                         ctx.fillText(`  ${label}`, startX, startY + index * 30 - 20);
                     }
                 });
+                const backIndex = roster.length;
+                if (battleState.consultantSelection === backIndex) {
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.fillText(`> Back`, startX, startY + backIndex * 30 - 20);
+                } else {
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(`  Back`, startX, startY + backIndex * 30 - 20);
+                }
             }
         }
 
