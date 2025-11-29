@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Beamtomon: Office Editions</title>
+    <title>Beamtomon: Office Editions (Pause Fixed)</title>
     <style>
         body {
             margin: 0;
@@ -19,6 +19,7 @@
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
+            touch-action: none; /* Prevent browser zooming/scrolling globally */
         }
 
         #game-container {
@@ -38,7 +39,9 @@
             display: flex;
             flex-direction: column;
             gap: 5px;
-            z-index: 10;
+            /* Z-Index increased to be higher than controls (20) */
+            z-index: 50; 
+            position: relative;
             font-size: 14px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
@@ -71,6 +74,23 @@
         #ui-score { color: #f1c40f; font-weight: bold; }
         #ui-signatures { color: #2ecc71; font-weight: bold; text-transform: uppercase; }
         #ui-donuts { color: #e67e22; }
+
+        /* Pause Button */
+        #pause-btn {
+            background: #e67e22;
+            color: white;
+            border: 2px solid #fff;
+            padding: 8px 12px; /* Larger touch target */
+            font-family: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-left: 10px;
+            touch-action: manipulation;
+            pointer-events: auto; /* Ensure it receives clicks */
+        }
+        #pause-btn:active { background: #d35400; transform: translateY(1px); }
 
         /* --- Canvas Wrapper --- */
         #canvas-wrapper {
@@ -153,7 +173,8 @@
 
         .action-btn:active { background: rgba(0, 255, 0, 0.4); transform: scale(0.95); }
 
-        #game-over-modal {
+        /* --- Modals --- */
+        .modal-overlay {
             position: absolute;
             top: 0;
             left: 0;
@@ -176,28 +197,54 @@
             border: 4px solid #fff;
             border-radius: 10px;
             text-align: center;
+            min-width: 250px;
             max-width: 80%;
             pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
-        .modal-title { font-size: 32px; color: #e74c3c; margin-bottom: 15px; }
-        .modal-score { font-size: 20px; margin-bottom: 20px; color: #f1c40f; }
+        .modal-title { font-size: 32px; color: #e74c3c; margin-bottom: 5px; }
+        .modal-score { font-size: 20px; color: #f1c40f; }
 
-        .restart-btn {
-            background: #27ae60;
+        .menu-btn {
+            background: #34495e;
             color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 20px;
+            border: 2px solid #fff;
+            padding: 12px 20px;
+            font-size: 18px;
             font-family: 'Courier New', Courier, monospace;
             cursor: pointer;
             border-radius: 5px;
             pointer-events: auto;
             touch-action: manipulation;
+            transition: background 0.1s;
         }
         
-        .restart-btn:hover { background: #2ecc71; }
-        .restart-btn:active { background: #1e8449; transform: translateY(2px); }
+        .menu-btn:hover { background: #3e5871; }
+        .menu-btn:active { background: #2c3e50; transform: translateY(2px); }
+        .menu-btn.primary { background: #27ae60; }
+        .menu-btn.primary:hover { background: #2ecc71; }
+        .menu-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        #toast-msg {
+            position: absolute;
+            top: 60px; /* Moved down slightly */
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: #f1c40f;
+            padding: 10px 20px;
+            border: 1px solid #fff;
+            border-radius: 20px;
+            z-index: 200;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+            text-align: center;
+            font-weight: bold;
+        }
 
     </style>
 </head>
@@ -208,6 +255,7 @@
             <div class="ui-row" style="margin-bottom: 5px;">
                 <span id="ui-name">Intern (Lvl 1)</span>
                 <div class="ui-group">
+                    <button id="pause-btn">PAUSE</button>
                     <span id="ui-score">0 Pts</span>
                     <span id="ui-stage" style="color:#aaa;">Stg 1</span>
                 </div>
@@ -231,11 +279,25 @@
         <div id="canvas-wrapper">
             <canvas id="gameCanvas" width="800" height="600"></canvas>
             
-            <div id="game-over-modal" class="hidden">
+            <div id="toast-msg">Game Saved!</div>
+
+            <!-- Pause Menu -->
+            <div id="pause-modal" class="modal-overlay hidden">
+                <div class="modal-content">
+                    <div class="modal-title" style="color: #e67e22;">PAUSED</div>
+                    <button id="resume-btn" class="menu-btn primary">Resume</button>
+                    <button id="save-btn" class="menu-btn">Save Game</button>
+                    <button id="load-btn" class="menu-btn">Load Game</button>
+                    <button id="quit-btn" class="menu-btn" style="background:#c0392b;">Reset</button>
+                </div>
+            </div>
+
+            <!-- Game Over Menu -->
+            <div id="game-over-modal" class="modal-overlay hidden">
                 <div class="modal-content">
                     <div class="modal-title">BURNOUT!</div>
                     <div class="modal-score" id="final-score">Score: 0</div>
-                    <button id="restart-btn" class="restart-btn">Back to Work</button>
+                    <button id="restart-btn" class="menu-btn primary">Back to Work</button>
                 </div>
             </div>
 
@@ -390,6 +452,8 @@
         const STATE_WORLD = 'WORLD';
         const STATE_BATTLE = 'BATTLE';
         const STATE_GAME_OVER = 'GAME_OVER';
+        const STATE_PAUSED = 'PAUSED';
+
         let currentState = STATE_WORLD;
         let shakeAmount = 0;
         let battleCooldown = 0; 
@@ -407,9 +471,9 @@
         let joystickVector = { x: 0, y: 0 };
         let joystickTimer = 0;
 
-        const floatingTexts = [];
+        let floatingTexts = [];
 
-        const player = {
+        let player = {
             x: 100,
             y: 100,
             width: 30,
@@ -439,7 +503,6 @@
 
         const TITLES = ["Intern", "Junior Associate", "Senior Associate", "Manager", "Director"];
         
-        // Updated Attacks (Removed Item from attack list)
         const PLAYER_ATTACKS = [
             { name: "Permission Denied", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }, 
             { name: "Pass the Buck", damage: 6, type: FACT_POLITICIAN },
@@ -480,10 +543,10 @@
             { name: "Colleague", dept: FACT_OFFICER, color: "#95a5a6", shirt: "#7f8c8d", pants: "#34495e", hp: 20, xp: 25 }
         ];
 
-        const worldMap = [];
-        const objectMap = [];
-        const enemies = [];
-        const lootedObjects = []; 
+        let worldMap = [];
+        let objectMap = [];
+        let enemies = [];
+        let lootedObjects = []; 
 
         function getActiveFighter() {
             if (!battleState || battleState.fighterIndex === -1) return player;
@@ -522,18 +585,6 @@
             ctx.beginPath();
             ctx.arc(x, y, r, 0, Math.PI * 2);
             ctx.fill();
-        }
-
-        function roundRect(ctx, x, y, w, h, r, color, stroke) {
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.roundRect(x, y, w, h, r);
-            ctx.fill();
-            if (stroke) {
-                ctx.strokeStyle = stroke;
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            }
         }
 
         function drawCharacter(ctx, x, y, type, scale = 1, isBack = false, animOffset = 0, status = null, isWalking = false, rotation = 0, xOffset = 0, yOffset = 0) {
@@ -709,13 +760,23 @@
         }
 
         // --- Map Generation ---
-        function initMap() {
-            mapSeedVal = 100 + currentStage * 997; 
-            worldMap.length = 0;
-            objectMap.length = 0;
-            enemies.length = 0;
-            lootedObjects.length = 0; 
-            player.signatures = 0;
+        function initMap(preserveEntities = false) {
+            // Seed logic: If we are loading a game, we rely on the restored mapSeedVal.
+            // If new level, we set based on stage.
+            if (!preserveEntities) {
+                 mapSeedVal = 100 + currentStage * 997; 
+                 enemies.length = 0;
+                 lootedObjects.length = 0; 
+                 player.signatures = 0;
+            } else {
+                 // For loading, we want to regenerate the terrain using the base seed for this stage
+                 // but NOT reset enemies/looted.
+                 // We must reset the seed to the start of the stage to get identical terrain.
+                 mapSeedVal = 100 + currentStage * 997; 
+            }
+
+            worldMap = [];
+            objectMap = [];
 
             for (let r = 0; r < MAP_ROWS; r++) {
                 const row = new Array(MAP_COLS).fill(TILE_WALL);
@@ -804,24 +865,31 @@
                 coffeeAttempts++;
             }
 
-            let spawnFound = false;
-            for(let r=1; r<MAP_ROWS; r++) {
-                for(let c=1; c<MAP_COLS; c++) {
-                    if(worldMap[r][c] === TILE_FLOOR && objectMap[r][c] === OBJ_NONE) {
-                        player.x = c * TILE_SIZE + 5;
-                        player.y = r * TILE_SIZE + 5;
-                        objectMap[r][c] = OBJ_NONE;
-                        if (c+1 < MAP_COLS) objectMap[r][c+1] = OBJ_NONE;
-                        spawnFound = true;
-                        break;
+            if (!preserveEntities) {
+                let spawnFound = false;
+                for(let r=1; r<MAP_ROWS; r++) {
+                    for(let c=1; c<MAP_COLS; c++) {
+                        if(worldMap[r][c] === TILE_FLOOR && objectMap[r][c] === OBJ_NONE) {
+                            player.x = c * TILE_SIZE + 5;
+                            player.y = r * TILE_SIZE + 5;
+                            objectMap[r][c] = OBJ_NONE;
+                            if (c+1 < MAP_COLS) objectMap[r][c+1] = OBJ_NONE;
+                            spawnFound = true;
+                            break;
+                        }
                     }
+                    if(spawnFound) break;
                 }
-                if(spawnFound) break;
-            }
 
-            const enemyCount = 8 + currentStage * 2;
-            for (let i = 0; i < enemyCount; i++) {
-                spawnEnemy();
+                const enemyCount = 8 + currentStage * 2;
+                for (let i = 0; i < enemyCount; i++) {
+                    spawnEnemy();
+                }
+            } else {
+                // Ensure player start position is clear if loading
+                const pr = Math.floor((player.y+15)/TILE_SIZE);
+                const pc = Math.floor((player.x+15)/TILE_SIZE);
+                if (objectMap[pr] && objectMap[pr][pc]) objectMap[pr][pc] = OBJ_NONE;
             }
             updateHUD(); 
         }
@@ -874,6 +942,7 @@
             if (currentState === STATE_GAME_OVER) return;
             if (keys[e.key]) return;
             keys[e.key] = true;
+            if (currentState === STATE_PAUSED) return; // Block input when paused
             if (currentState === STATE_BATTLE) handleBattleInput(e.key);
             else if (currentState === STATE_WORLD) handleWorldInput(e.key);
         });
@@ -887,7 +956,7 @@
 
         function handleStart(e) {
             initAudio();
-            if (currentState === STATE_GAME_OVER) return;
+            if (currentState === STATE_GAME_OVER || currentState === STATE_PAUSED) return;
             e.preventDefault();
             joystickActive = true;
             const rect = joystick.getBoundingClientRect();
@@ -939,7 +1008,7 @@
              const key = btn.getAttribute('data-key');
              const trigger = () => {
                  initAudio();
-                 if (currentState === STATE_GAME_OVER) return;
+                 if (currentState === STATE_GAME_OVER || currentState === STATE_PAUSED) return;
                  if (currentState === STATE_BATTLE) handleBattleInput(key);
                  else if (currentState === STATE_WORLD) handleWorldInput(key);
                  keys[key] = true;
@@ -950,20 +1019,141 @@
         });
 
         document.getElementById('restart-btn').addEventListener('click', restartGame);
-        document.getElementById('restart-btn').addEventListener('touchstart', (e) => {
-            e.preventDefault();
+        
+        // --- Pause & Menu Logic ---
+
+        const pauseBtn = document.getElementById('pause-btn');
+        const pauseModal = document.getElementById('pause-modal');
+        const resumeBtn = document.getElementById('resume-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const loadBtn = document.getElementById('load-btn');
+        const quitBtn = document.getElementById('quit-btn');
+        const toastMsg = document.getElementById('toast-msg');
+
+        // Robust button binder helper
+        function bindButton(btn, callback) {
+            if (!btn) return;
+            // Prevent default to stop mouse emulation and ghost clicks
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation(); // Stop bubbling to game controls
+                initAudio();
+                callback();
+            }, { passive: false });
+            
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                initAudio();
+                callback();
+            });
+        }
+
+        bindButton(pauseBtn, togglePause);
+        bindButton(resumeBtn, togglePause);
+        
+        function showToast(msg) {
+            toastMsg.innerText = msg;
+            toastMsg.style.opacity = 1;
+            setTimeout(() => { toastMsg.style.opacity = 0; }, 2000);
+        }
+
+        function togglePause() {
+            if (currentState === STATE_GAME_OVER) return;
+            
+            if (currentState === STATE_PAUSED) {
+                // Unpause
+                currentState = previousState;
+                pauseModal.classList.add('hidden');
+            } else {
+                // Pause
+                previousState = currentState;
+                currentState = STATE_PAUSED;
+                pauseModal.classList.remove('hidden');
+                
+                // Disable save if in battle
+                if (previousState === STATE_BATTLE) {
+                    saveBtn.disabled = true;
+                    saveBtn.innerText = "Save (World Only)";
+                } else {
+                    saveBtn.disabled = false;
+                    saveBtn.innerText = "Save Game";
+                }
+            }
+        }
+
+        bindButton(saveBtn, () => {
+            if (previousState === STATE_BATTLE) return;
+            
+            const saveData = {
+                player: player,
+                enemies: enemies,
+                lootedObjects: lootedObjects,
+                currentStage: currentStage,
+                mapSeedVal: mapSeedVal
+            };
+            localStorage.setItem('beamtomon_save', JSON.stringify(saveData));
+            showToast("Game Saved!");
+        });
+
+        bindButton(loadBtn, () => {
+            const saveString = localStorage.getItem('beamtomon_save');
+            if (!saveString) {
+                showToast("No Save Found!");
+                return;
+            }
+
+            try {
+                const saveData = JSON.parse(saveString);
+                
+                // Restore globals
+                currentStage = saveData.currentStage;
+                // mapSeedVal is tricky. initMap uses mapSeedVal.
+                // We rely on initMap's logic: mapSeedVal = 100 + currentStage * 997.
+                // This reconstructs the base map.
+                
+                // 1. Rebuild terrain (preserveEntities = true prevents spawning new enemies/resetting player pos)
+                initMap(true); 
+
+                // 2. Overwrite entities with saved data
+                player = saveData.player;
+                enemies = saveData.enemies;
+                lootedObjects = saveData.lootedObjects;
+
+                // 3. Reset UI state
+                currentState = STATE_WORLD;
+                previousState = STATE_WORLD;
+                document.getElementById('ui-panel').style.display = 'flex';
+                pauseModal.classList.add('hidden');
+                updateHUD();
+                
+                showToast("Game Loaded!");
+
+            } catch (e) {
+                console.error("Load failed", e);
+                showToast("Save Data Corrupt!");
+            }
+        });
+
+        bindButton(quitBtn, () => {
+            pauseModal.classList.add('hidden');
             restartGame();
         });
 
+
         // --- Game Loop ---
         let lastTime = 0;
+        let previousState = STATE_WORLD;
+
         function gameLoop(timestamp) {
             const deltaTime = (timestamp - lastTime) / 1000;
             lastTime = timestamp;
-            if (currentState !== STATE_GAME_OVER) {
+            
+            if (currentState !== STATE_GAME_OVER && currentState !== STATE_PAUSED) {
                 update(deltaTime);
-                draw();
             }
+            
+            // Draw continuously even when paused
+            draw();
             requestAnimationFrame(gameLoop);
         }
 
@@ -997,8 +1187,8 @@
                 ctx.translate(dx, dy);
             }
 
-            if (currentState === STATE_WORLD) drawWorld();
-            else if (currentState === STATE_BATTLE) drawBattle();
+            if (currentState === STATE_WORLD || (currentState === STATE_PAUSED && previousState === STATE_WORLD)) drawWorld();
+            else if (currentState === STATE_BATTLE || (currentState === STATE_PAUSED && previousState === STATE_BATTLE)) drawBattle();
 
             ctx.restore();
             
@@ -1636,6 +1826,7 @@
             document.getElementById('game-over-modal').classList.add('hidden');
             initMap();
             currentState = STATE_WORLD;
+            previousState = STATE_WORLD;
             document.getElementById('ui-panel').style.display = 'flex';
             updateHUD();
             draw();
@@ -1761,12 +1952,9 @@
                 });
             } else if (battleState.phase === 'ATTACK_SELECT') {
                 let moves = PLAYER_ATTACKS;
-                // No item in attack list
                 if (battleState.fighterIndex !== -1) {
                     moves = ENEMY_MOVES["Consultant"]; 
                 }
-                // Filter out items from attack list display if I missed removing it from PLAYER_ATTACKS data earlier
-                // But I already removed it from the constant.
 
                 moves.forEach((att, index) => {
                     if (index === battleState.attackSelection) {
