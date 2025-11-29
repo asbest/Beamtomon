@@ -254,6 +254,100 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
+        // --- Sound System (Web Audio API) ---
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return; 
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+
+            if (type === 'action') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0.001, now + 0.05);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            } else if (type === 'attack') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'hit') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.linearRampToValueAtTime(50, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'heal') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+                osc.frequency.linearRampToValueAtTime(1200, now + 0.3);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (type === 'defeat') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(50, now + 0.8);
+                const lfo = audioCtx.createOscillator();
+                lfo.type = 'sine';
+                lfo.frequency.value = 10;
+                const lfoGain = audioCtx.createGain();
+                lfoGain.gain.value = 20;
+                lfo.connect(lfoGain);
+                lfoGain.connect(osc.frequency);
+                lfo.start(now);
+                lfo.stop(now + 0.8);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.8);
+                osc.start(now);
+                osc.stop(now + 0.8);
+            } else if (type === 'victory') {
+                const now = audioCtx.currentTime;
+                playNote(600, now, 0.1);
+                playNote(800, now + 0.1, 0.1);
+                playNote(1000, now + 0.2, 0.2);
+            }
+        }
+
+        function playNote(freq, time, dur) {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.frequency.value = freq;
+            o.type = 'square';
+            g.gain.setValueAtTime(0.1, time);
+            g.gain.linearRampToValueAtTime(0, time + dur);
+            o.start(time);
+            o.stop(time + dur);
+        }
+
         // Game Constants
         const TILE_SIZE = 40;
         const SCREEN_WIDTH = 800;
@@ -345,10 +439,10 @@
 
         const TITLES = ["Intern", "Junior Associate", "Senior Associate", "Manager", "Director"];
         
+        // Updated Attacks (Removed Item from attack list)
         const PLAYER_ATTACKS = [
             { name: "Permission Denied", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }, 
             { name: "Pass the Buck", damage: 6, type: FACT_POLITICIAN },
-            { name: "Item", isItem: true },
             { name: "Form A38", damage: 8, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.3 } 
         ];
 
@@ -442,17 +536,13 @@
             }
         }
 
-        // ADDED: extra params for animation
         function drawCharacter(ctx, x, y, type, scale = 1, isBack = false, animOffset = 0, status = null, isWalking = false, rotation = 0, xOffset = 0, yOffset = 0) {
             const w = 30 * scale;
             const h = 30 * scale;
             const cx = x + w / 2;
             const cy = y + h / 2;
 
-            // Save context for rotation/translation
             ctx.save();
-            
-            // Move to center, rotate/shake, then move back for drawing relative to 0,0 of character
             ctx.translate(cx + xOffset, cy + yOffset);
             ctx.rotate(rotation);
             ctx.translate(-cx, -cy);
@@ -486,7 +576,6 @@
                 shirtColor = '#95a5a6'; pantsColor = '#34495e';
             }
 
-            // Shadow (Static relative to floor, so we draw it outside rotation? No, let it rotate for effect)
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath();
             ctx.ellipse(cx, y + h - 2*scale, w/2, h/6, 0, 0, Math.PI*2);
@@ -781,6 +870,7 @@
         // --- Input Handling ---
 
         window.addEventListener('keydown', (e) => {
+            initAudio();
             if (currentState === STATE_GAME_OVER) return;
             if (keys[e.key]) return;
             keys[e.key] = true;
@@ -796,6 +886,7 @@
         const maxRadius = 50;
 
         function handleStart(e) {
+            initAudio();
             if (currentState === STATE_GAME_OVER) return;
             e.preventDefault();
             joystickActive = true;
@@ -847,6 +938,7 @@
         document.querySelectorAll('.action-btn').forEach(btn => {
              const key = btn.getAttribute('data-key');
              const trigger = () => {
+                 initAudio();
                  if (currentState === STATE_GAME_OVER) return;
                  if (currentState === STATE_BATTLE) handleBattleInput(key);
                  else if (currentState === STATE_WORLD) handleWorldInput(key);
@@ -857,7 +949,6 @@
              btn.addEventListener('mousedown', (e) => { e.preventDefault(); trigger(); });
         });
 
-        // Event listener for restart
         document.getElementById('restart-btn').addEventListener('click', restartGame);
         document.getElementById('restart-btn').addEventListener('touchstart', (e) => {
             e.preventDefault();
@@ -922,41 +1013,6 @@
             return TITLES[Math.min(index, TITLES.length - 1)];
         }
 
-        // --- Battle Update (with Animation) ---
-        function updateBattle(dt) {
-            updateBattleJoystick(dt);
-
-            if (battleState.phase === 'DEFEAT_ANIMATION') {
-                battleState.animTimer += dt;
-                const t = battleState.animTimer;
-
-                // Phase 1: Shake (0 to 0.5s)
-                if (t < 0.5) {
-                    battleState.enemy.shakeX = (Math.random() - 0.5) * 10;
-                } 
-                // Phase 2: Fall (0.5s to 1.0s)
-                else if (t < 1.0) {
-                    battleState.enemy.shakeX = 0;
-                    const fallProgress = (t - 0.5) / 0.5; // 0 to 1
-                    // Rotate 90 degrees (PI/2)
-                    battleState.enemy.rotation = fallProgress * (Math.PI / 2);
-                    // Move down slightly
-                    battleState.enemy.yOffset = fallProgress * 40;
-                } 
-                // Phase 3: Done
-                else {
-                    battleState.enemy.rotation = Math.PI / 2;
-                    battleState.enemy.yOffset = 40;
-                    battleState.enemy.shakeX = 0;
-                    
-                    // Trigger win
-                    battleState.phase = 'MESSAGE'; // Or whatever next
-                    winBattle();
-                }
-            }
-        }
-
-
         // --- World Update ---
         function updateBattleJoystick(dt) {
             joystickTimer -= dt;
@@ -980,9 +1036,9 @@
                 if (dist < 60) {
                     player.hp = player.maxHp;
                     player.status = null;
-                    // Heal consultants too
                     player.consultants.forEach(c => c.hp = c.maxHp);
                     
+                    playSound('heal');
                     floatingTexts.push({
                         text: "Coffee Break! Team HP Maxed!",
                         x: player.x,
@@ -1007,6 +1063,7 @@
                     const id = `${n.r},${n.c}`;
                     if ((obj === OBJ_DESK || obj === OBJ_PLANT) && !lootedObjects.includes(id)) {
                         lootedObjects.push(id);
+                        playSound('action');
                         if (Math.random() < 0.5) {
                             player.inventory.donuts++;
                             floatingTexts.push({ text: "Found Donut!", x: n.c*TILE_SIZE, y: n.r*TILE_SIZE, color: '#e67e22', time: 1.5 });
@@ -1080,6 +1137,7 @@
 
         function nextStage() {
             currentStage++;
+            playSound('victory');
             floatingTexts.push({
                 text: "STAGE CLEAR!",
                 x: SCREEN_WIDTH/2,
@@ -1175,20 +1233,20 @@
         function startBattle(enemy, index) {
             currentState = STATE_BATTLE;
             currentEnemyIndex = index;
-            // Hide UI panel in battle
             document.getElementById('ui-panel').style.display = 'none';
 
             battleState = {
                 enemy: enemy,
                 menuSelection: 0,
                 attackSelection: 0,
-                consultantSelection: 0, // Selection index for switch menu
-                fighterIndex: -1, // -1 = Player, 0+ = Consultant
+                consultantSelection: 0, 
+                fighterIndex: -1, 
                 phase: 'MENU',
                 log: `You encountered a ${enemy.name}!`,
                 turn: 'PLAYER',
-                animTimer: 0, // For animations
-                onAck: null 
+                animTimer: 0, 
+                onAck: null,
+                itemSelection: 0
             };
 
             joystickVector = { x: 0, y: 0 };
@@ -1196,8 +1254,30 @@
             keys['ArrowLeft'] = false; keys['ArrowRight'] = false;
         }
 
+        function useItem(itemName) {
+            const fighter = getActiveFighter();
+            if (itemName === "Donut") {
+                if (player.inventory.donuts > 0) {
+                    player.inventory.donuts--;
+                    fighter.hp = Math.min(fighter.maxHp, fighter.hp + 10);
+                    fighter.status = null;
+                    playSound('heal');
+                    battleState.log = `Ate Donut! +10 Sanity.`;
+                } else {
+                    battleState.log = "No Donuts left!";
+                    battleState.phase = 'MESSAGE';
+                    battleState.onAck = () => { battleState.phase = 'ITEM_SELECT'; };
+                    return; 
+                }
+            }
+            battleState.phase = 'MESSAGE';
+            battleState.onAck = () => enemyTurn();
+        }
+
         function handleBattleInput(key) {
-             if (battleState.phase === 'DEFEAT_ANIMATION') return; // Block input during anim
+             playSound('action');
+
+             if (battleState.phase === 'DEFEAT_ANIMATION') return; 
 
              if (battleState.phase === 'MESSAGE') {
                  if (key === 'Enter' || key === ' ') {
@@ -1222,16 +1302,21 @@
                     }
                 }
 
-                if (key === 'ArrowUp') battleState.menuSelection = (battleState.menuSelection - 1 + 4) % 4; // Increased to 4 options
-                if (key === 'ArrowDown') battleState.menuSelection = (battleState.menuSelection + 1) % 4;
+                // MENU: 0=FIGHT, 1=ITEM, 2=HIRE, 3=SWITCH, 4=RUN
+                if (key === 'ArrowUp') battleState.menuSelection = (battleState.menuSelection - 1 + 5) % 5; 
+                if (key === 'ArrowDown') battleState.menuSelection = (battleState.menuSelection + 1) % 5;
                 if (key === 'Enter' || key === ' ') {
                     if (battleState.menuSelection === 0) { // FIGHT
                         battleState.phase = 'ATTACK_SELECT';
                         battleState.attackSelection = 0;
                         battleState.log = "Select Action:";
-                    } else if (battleState.menuSelection === 1) { // HIRE
+                    } else if (battleState.menuSelection === 1) { // ITEM
+                        battleState.phase = 'ITEM_SELECT';
+                        battleState.itemSelection = 0;
+                        battleState.log = "Select Item:";
+                    } else if (battleState.menuSelection === 2) { // HIRE
                         attemptCatch();
-                    } else if (battleState.menuSelection === 2) { // SWITCH
+                    } else if (battleState.menuSelection === 3) { // SWITCH
                         if (player.consultants.length > 0) {
                             battleState.phase = 'SWITCH_SELECT';
                             battleState.consultantSelection = 0;
@@ -1241,10 +1326,9 @@
                             battleState.phase = 'MESSAGE';
                             battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
                         }
-                    } else if (battleState.menuSelection === 3) { // RUN
+                    } else if (battleState.menuSelection === 4) { // RUN
                         if (Math.random() < 0.5) {
                             battleState.log = "Ran away safely!";
-                            // Safe run logic
                             const enemy = battleState.enemy;
                             let dx = player.x - enemy.x;
                             let dy = player.y - enemy.y;
@@ -1277,20 +1361,34 @@
             } else if (battleState.phase === 'ATTACK_SELECT') {
                 if (key === 'ArrowUp') battleState.attackSelection = (battleState.attackSelection - 1 + 4) % 4;
                 if (key === 'ArrowDown') battleState.attackSelection = (battleState.attackSelection + 1) % 4;
+                if (key === 'Escape') {
+                    battleState.phase = 'MENU';
+                    battleState.log = "What will you do?";
+                }
+                let moves = PLAYER_ATTACKS;
+                if (battleState.fighterIndex !== -1) {
+                    moves = ENEMY_MOVES["Consultant"]; 
+                }
+                if (key === 'Enter' || key === ' ') performAttack(moves[battleState.attackSelection]);
+            } else if (battleState.phase === 'ITEM_SELECT') {
+                // Just one item for now
+                if (key === 'Escape') {
+                    battleState.phase = 'MENU';
+                    battleState.log = "Action?";
+                }
                 if (key === 'Enter' || key === ' ') {
-                     // Use Consultant Moves if consultant is active, else Player moves
-                    let moves = PLAYER_ATTACKS;
-                    if (battleState.fighterIndex !== -1) {
-                        moves = ENEMY_MOVES["Consultant"]; 
-                    }
-                    performAttack(moves[battleState.attackSelection]);
+                    useItem("Donut");
                 }
             } else if (battleState.phase === 'SWITCH_SELECT') {
-                const count = player.consultants.length + 1; // +1 for Player
+                const count = player.consultants.length + 1; 
                 if (key === 'ArrowUp') battleState.consultantSelection = (battleState.consultantSelection - 1 + count) % count;
                 if (key === 'ArrowDown') battleState.consultantSelection = (battleState.consultantSelection + 1) % count;
+                if (key === 'Escape') {
+                    battleState.phase = 'MENU';
+                    battleState.log = "Action?";
+                }
                 if (key === 'Enter' || key === ' ') {
-                    let targetIndex = battleState.consultantSelection - 1; // 0->-1, 1->0 etc.
+                    let targetIndex = battleState.consultantSelection - 1; 
                     let targetFighter = (targetIndex === -1) ? player : player.consultants[targetIndex];
                     
                     if (targetFighter.hp <= 0) {
@@ -1305,7 +1403,6 @@
                         battleState.fighterIndex = targetIndex;
                         battleState.log = `Go, ${targetFighter.name}!`;
                         battleState.phase = 'MESSAGE';
-                        // Switching takes a turn? Yes.
                         battleState.onAck = () => enemyTurn();
                     }
                 }
@@ -1325,42 +1422,19 @@
 
         function performAttack(attack) {
             const fighter = getActiveFighter();
-            
-            if (fighter.status && fighter.status.type === 'NAUSEA') {
-                fighter.hp -= 2;
-                if (fighter.hp <= 0) { 
-                    fighter.hp = 0; 
-                    if (fighter === player) { currentState = STATE_GAME_OVER; return; }
-                    else {
-                        battleState.log = `${fighter.name} collapsed!`;
-                        battleState.fighterIndex = -1; // Force swap to player
-                        battleState.phase = 'MESSAGE';
-                        battleState.onAck = () => { battleState.phase = 'MENU'; };
-                        return;
-                    }
-                }
+
+            if (player.status && player.status.type === 'NAUSEA') {
+                player.hp -= 2;
+                if (player.hp <= 0) { player.hp = 0; currentState = STATE_GAME_OVER; return; }
             }
 
-            if (attack.isItem) {
-                // Item logic only for player inventory
-                if (player.inventory.donuts > 0) {
-                    player.inventory.donuts--;
-                    fighter.hp = Math.min(fighter.maxHp, fighter.hp + 10);
-                    fighter.status = null;
-                    battleState.log = `Ate Donut! +10 Sanity.`;
-                } else {
-                    battleState.log = "No Donuts left!";
-                }
-                battleState.phase = 'MESSAGE';
-                battleState.onAck = () => enemyTurn();
-                return;
-            }
+            // Note: isItem check removed from here as items are handled via useItem
 
-            let multiplier = getTypeEffectiveness(fighter.dept || FACT_NEUTRAL, battleState.enemy.dept);
-            let damage = Math.floor(attack.damage * multiplier + fighter.level / 2);
-            
-            // Player specific bonus
-            if (fighter === player && player.consultants.length > 0) damage += 1; // Small bonus for leadership
+            playSound('attack');
+
+            let multiplier = getTypeEffectiveness(player.dept, battleState.enemy.dept);
+            let damage = Math.floor(attack.damage * multiplier + player.level / 2);
+            if (player.consultants > 0) damage += player.consultants.length; // Small bonus
 
             if (attack.effect && Math.random() < attack.chance) {
                 battleState.enemy.status = { type: attack.effect };
@@ -1376,7 +1450,7 @@
             battleState.onAck = () => {
                 if (battleState.enemy.hp <= 0) {
                     battleState.enemy.hp = 0;
-                    // START ANIMATION
+                    playSound('defeat');
                     battleState.phase = 'DEFEAT_ANIMATION';
                     battleState.animTimer = 0;
                 } else {
@@ -1395,20 +1469,19 @@
 
             if (battleState.enemy.type === "Consultant") {
                 if (Math.random() < 0.6) {
-                    // Create new consultant object
                     const newCon = {
                         name: "Consultant",
                         type: "Consultant",
-                        dept: FACT_POLITICIAN, // Consultants are Politician faction
+                        dept: FACT_POLITICIAN, 
                         level: battleState.enemy.level || 1,
-                        hp: battleState.enemy.hp, // Hire with current HP
+                        hp: battleState.enemy.hp, 
                         maxHp: battleState.enemy.maxHp,
                         xp: 0,
                         nextLevelXp: 50,
                         status: null
                     };
                     player.consultants.push(newCon);
-                    
+                    playSound('victory');
                     battleState.log = "Hired Consultant!";
                     battleState.phase = 'MESSAGE';
                     battleState.onAck = () => { 
@@ -1444,10 +1517,12 @@
                 if (battleState.enemy.status.type === 'CONFUSE') {
                     if (Math.random() < 0.5) {
                         battleState.log = "Enemy Confused! Hurts itself!";
+                        playSound('hit');
                         battleState.enemy.hp -= 3;
                         battleState.phase = 'MESSAGE';
                         battleState.onAck = () => {
                             if (battleState.enemy.hp <= 0) {
+                                 playSound('defeat');
                                  battleState.phase = 'DEFEAT_ANIMATION';
                                  battleState.animTimer = 0;
                             }
@@ -1462,7 +1537,6 @@
             const move = moves[Math.floor(Math.random() * moves.length)];
             
             const levelScale = 1 + (player.level * 0.1);
-            // Defending type is active fighter type
             let multiplier = getTypeEffectiveness(move.type || FACT_NEUTRAL, fighter.dept || FACT_OFFICER);
             let damage = Math.floor(move.damage * levelScale * multiplier);
             damage = Math.floor(damage * (0.8 + Math.random() * 0.4));
@@ -1476,6 +1550,7 @@
                 battleState.log = `${battleState.enemy.name} used ${move.name}! -${damage} Sanity${effText}`;
             }
 
+            playSound('hit');
             fighter.hp -= damage;
             shakeAmount = 20;
 
@@ -1484,13 +1559,13 @@
                 if (fighter.hp <= 0) {
                     fighter.hp = 0;
                     if (fighter === player) {
+                        playSound('defeat');
                         currentState = STATE_GAME_OVER;
                         document.getElementById('final-score').innerText = `Score: ${player.score}`;
                         document.getElementById('game-over-modal').classList.remove('hidden');
                     } else {
-                        // Consultant defeated
                         battleState.log = `${fighter.name} retreated!`;
-                        battleState.fighterIndex = -1; // Auto switch to player
+                        battleState.fighterIndex = -1; 
                         battleState.phase = 'MESSAGE';
                         battleState.onAck = () => { battleState.phase = 'MENU'; };
                     }
@@ -1514,6 +1589,7 @@
                 sigText = " Found Signature!";
             }
 
+            playSound('victory');
             battleState.log = `Win! +${xpGain} XP for ${fighter.name}. +${scoreGain} Pts.${sigText}`;
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
@@ -1534,6 +1610,7 @@
             fighter.nextLevelXp = Math.floor(fighter.nextLevelXp * 1.5);
             fighter.maxHp += 5;
             fighter.hp = fighter.maxHp;
+            playSound('victory'); 
             battleState.log = `${fighter.name} leveled up to ${fighter.level}!`;
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
@@ -1562,6 +1639,40 @@
             document.getElementById('ui-panel').style.display = 'flex';
             updateHUD();
             draw();
+        }
+
+        // --- Battle Update (with Animation) ---
+        function updateBattle(dt) {
+            updateBattleJoystick(dt);
+
+            if (battleState.phase === 'DEFEAT_ANIMATION') {
+                battleState.animTimer += dt;
+                const t = battleState.animTimer;
+
+                // Phase 1: Shake (0 to 0.5s)
+                if (t < 0.5) {
+                    battleState.enemy.shakeX = (Math.random() - 0.5) * 10;
+                } 
+                // Phase 2: Fall (0.5s to 1.0s)
+                else if (t < 1.0) {
+                    battleState.enemy.shakeX = 0;
+                    const fallProgress = (t - 0.5) / 0.5; // 0 to 1
+                    // Rotate 90 degrees (PI/2)
+                    battleState.enemy.rotation = fallProgress * (Math.PI / 2);
+                    // Move down slightly
+                    battleState.enemy.yOffset = fallProgress * 40;
+                } 
+                // Phase 3: Done
+                else {
+                    battleState.enemy.rotation = Math.PI / 2;
+                    battleState.enemy.yOffset = 40;
+                    battleState.enemy.shakeX = 0;
+                    
+                    // Trigger win
+                    battleState.phase = 'MESSAGE'; 
+                    winBattle();
+                }
+            }
         }
 
         function drawBattle() {
@@ -1597,10 +1708,8 @@
             ctx.fill();
 
             const fighter = getActiveFighter();
-            const fName = fighter === player ? "Officer" : "Consultant";
-            const fType = fighter === player ? player.type : fighter.type;
 
-            drawCharacter(ctx, 150, 200, fType, 4, true, 0, fighter.status);
+            drawCharacter(ctx, 150, 200, fighter.type, 4, true, 0, fighter.status);
 
             ctx.fillStyle = 'white';
             ctx.font = 'bold 24px Courier New';
@@ -1640,7 +1749,7 @@
                  ctx.font = 'bold 20px Courier New';
                  ctx.fillText("[Press A to continue]", 500, 560);
             } else if (battleState.phase === 'MENU') {
-                const options = ["FIGHT", "HIRE", "SWITCH", "RUN"];
+                const options = ["FIGHT", "ITEM", "HIRE", "SWITCH", "RUN"];
                 options.forEach((opt, index) => {
                     if (index === battleState.menuSelection) {
                         ctx.fillStyle = '#f1c40f';
@@ -1651,28 +1760,38 @@
                     }
                 });
             } else if (battleState.phase === 'ATTACK_SELECT') {
-                // If Consultant, use generic moves
                 let moves = PLAYER_ATTACKS;
-                if (fighter !== player) moves = ENEMY_MOVES["Consultant"];
+                // No item in attack list
+                if (battleState.fighterIndex !== -1) {
+                    moves = ENEMY_MOVES["Consultant"]; 
+                }
+                // Filter out items from attack list display if I missed removing it from PLAYER_ATTACKS data earlier
+                // But I already removed it from the constant.
 
                 moves.forEach((att, index) => {
-                    let label = att.name;
-                    if (att.isItem) label = `Eat Donut (${player.inventory.donuts})`;
-                    
                     if (index === battleState.attackSelection) {
                          ctx.fillStyle = '#f1c40f';
-                        ctx.fillText(`> ${label}`, startX, startY + index * 30 - 20);
+                        ctx.fillText(`> ${att.name}`, startX, startY + index * 30 - 20);
                     } else {
                          ctx.fillStyle = 'white';
-                        ctx.fillText(`  ${label}`, startX, startY + index * 30 - 20);
+                        ctx.fillText(`  ${att.name}`, startX, startY + index * 30 - 20);
                     }
                 });
+            } else if (battleState.phase === 'ITEM_SELECT') {
+                // Item list
+                let label = `Eat Donut (${player.inventory.donuts})`;
+                if (battleState.itemSelection === 0) {
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.fillText(`> ${label}`, startX, startY);
+                } else {
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(`  ${label}`, startX, startY);
+                }
             } else if (battleState.phase === 'SWITCH_SELECT') {
-                // List Player + Consultants
                 const roster = [player, ...player.consultants];
                 roster.forEach((char, index) => {
                     let label = char.name;
-                    if (char === player) label = "Player (You)"; // Changed from Officer
+                    if (char === player) label = "Player (You)"; 
                     label += ` HP:${char.hp}`;
                     
                     if (index === battleState.consultantSelection) {
