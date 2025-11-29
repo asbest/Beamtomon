@@ -272,6 +272,7 @@
         const OBJ_COFFEE_MACHINE = 5;
         const OBJ_EXIT_DOOR = 6; 
 
+        // Colors
         const COLOR_FLOOR = '#e0e0e0';
         const COLOR_WALL = '#555555';
         const COLOR_MENU_BG = '#303030';
@@ -322,7 +323,7 @@
             speed: 200,
             color: '#3498db',
             type: "Beamter",
-            name: "Officer", // FIXED: Added Name
+            name: "Player",
             dept: FACT_OFFICER, 
             level: 1,
             hp: 20,
@@ -334,7 +335,7 @@
             inventory: { donuts: 1 },
             status: null,
             isWalking: false,
-            consultants: []
+            consultants: [] 
         };
 
         const SIGNATURES_NEEDED = 3;
@@ -390,11 +391,6 @@
         const enemies = [];
         const lootedObjects = []; 
 
-        function getTitle(level) {
-            const index = Math.floor((level - 1) / 5);
-            return TITLES[Math.min(index, TITLES.length - 1)];
-        }
-
         function getActiveFighter() {
             if (!battleState || battleState.fighterIndex === -1) return player;
             return player.consultants[battleState.fighterIndex];
@@ -446,11 +442,21 @@
             }
         }
 
-        function drawCharacter(ctx, x, y, type, scale = 1, isBack = false, animOffset = 0, status = null, isWalking = false) {
+        // ADDED: extra params for animation
+        function drawCharacter(ctx, x, y, type, scale = 1, isBack = false, animOffset = 0, status = null, isWalking = false, rotation = 0, xOffset = 0, yOffset = 0) {
             const w = 30 * scale;
             const h = 30 * scale;
             const cx = x + w / 2;
+            const cy = y + h / 2;
+
+            // Save context for rotation/translation
+            ctx.save();
             
+            // Move to center, rotate/shake, then move back for drawing relative to 0,0 of character
+            ctx.translate(cx + xOffset, cy + yOffset);
+            ctx.rotate(rotation);
+            ctx.translate(-cx, -cy);
+
             const bobSpeed = isWalking ? 100 : 250;
             const bobAmt = isWalking ? 3 : 1;
             const drawY = y + Math.sin(Date.now() / bobSpeed) * (bobAmt * scale);
@@ -480,7 +486,7 @@
                 shirtColor = '#95a5a6'; pantsColor = '#34495e';
             }
 
-            ctx.save();
+            // Shadow (Static relative to floor, so we draw it outside rotation? No, let it rotate for effect)
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.beginPath();
             ctx.ellipse(cx, y + h - 2*scale, w/2, h/6, 0, 0, Math.PI*2);
@@ -728,7 +734,7 @@
             for (let i = 0; i < enemyCount; i++) {
                 spawnEnemy();
             }
-            updateHUD(); // Initial HUD update
+            updateHUD(); 
         }
 
         function spawnEnemy() {
@@ -759,7 +765,10 @@
                             level: 1 + Math.floor(currentStage/2), 
                             nextLevelXp: 50,
                             id: Math.random(),
-                            status: null
+                            status: null,
+                            rotation: 0,
+                            shakeX: 0,
+                            yOffset: 0
                         });
                         placed = true;
                     }
@@ -869,7 +878,7 @@
 
         function update(dt) {
             if (currentState === STATE_WORLD) updateWorld(dt);
-            else if (currentState === STATE_BATTLE) updateBattleJoystick(dt);
+            else if (currentState === STATE_BATTLE) updateBattle(dt);
             
             for (let i = floatingTexts.length - 1; i >= 0; i--) {
                 const txt = floatingTexts[i];
@@ -912,6 +921,41 @@
             const index = Math.floor((level - 1) / 5);
             return TITLES[Math.min(index, TITLES.length - 1)];
         }
+
+        // --- Battle Update (with Animation) ---
+        function updateBattle(dt) {
+            updateBattleJoystick(dt);
+
+            if (battleState.phase === 'DEFEAT_ANIMATION') {
+                battleState.animTimer += dt;
+                const t = battleState.animTimer;
+
+                // Phase 1: Shake (0 to 0.5s)
+                if (t < 0.5) {
+                    battleState.enemy.shakeX = (Math.random() - 0.5) * 10;
+                } 
+                // Phase 2: Fall (0.5s to 1.0s)
+                else if (t < 1.0) {
+                    battleState.enemy.shakeX = 0;
+                    const fallProgress = (t - 0.5) / 0.5; // 0 to 1
+                    // Rotate 90 degrees (PI/2)
+                    battleState.enemy.rotation = fallProgress * (Math.PI / 2);
+                    // Move down slightly
+                    battleState.enemy.yOffset = fallProgress * 40;
+                } 
+                // Phase 3: Done
+                else {
+                    battleState.enemy.rotation = Math.PI / 2;
+                    battleState.enemy.yOffset = 40;
+                    battleState.enemy.shakeX = 0;
+                    
+                    // Trigger win
+                    battleState.phase = 'MESSAGE'; // Or whatever next
+                    winBattle();
+                }
+            }
+        }
+
 
         // --- World Update ---
         function updateBattleJoystick(dt) {
@@ -1143,6 +1187,7 @@
                 phase: 'MENU',
                 log: `You encountered a ${enemy.name}!`,
                 turn: 'PLAYER',
+                animTimer: 0, // For animations
                 onAck: null 
             };
 
@@ -1152,6 +1197,8 @@
         }
 
         function handleBattleInput(key) {
+             if (battleState.phase === 'DEFEAT_ANIMATION') return; // Block input during anim
+
              if (battleState.phase === 'MESSAGE') {
                  if (key === 'Enter' || key === ' ') {
                      if (battleState.onAck) {
@@ -1258,6 +1305,7 @@
                         battleState.fighterIndex = targetIndex;
                         battleState.log = `Go, ${targetFighter.name}!`;
                         battleState.phase = 'MESSAGE';
+                        // Switching takes a turn? Yes.
                         battleState.onAck = () => enemyTurn();
                     }
                 }
@@ -1328,7 +1376,9 @@
             battleState.onAck = () => {
                 if (battleState.enemy.hp <= 0) {
                     battleState.enemy.hp = 0;
-                    winBattle();
+                    // START ANIMATION
+                    battleState.phase = 'DEFEAT_ANIMATION';
+                    battleState.animTimer = 0;
                 } else {
                     enemyTurn();
                 }
@@ -1397,7 +1447,10 @@
                         battleState.enemy.hp -= 3;
                         battleState.phase = 'MESSAGE';
                         battleState.onAck = () => {
-                            if (battleState.enemy.hp <= 0) winBattle();
+                            if (battleState.enemy.hp <= 0) {
+                                 battleState.phase = 'DEFEAT_ANIMATION';
+                                 battleState.animTimer = 0;
+                            }
                             else { battleState.phase = 'MENU'; battleState.log = "Action?"; }
                         };
                         return;
@@ -1524,7 +1577,7 @@
             ctx.fill();
 
             const enemy = battleState.enemy;
-            drawCharacter(ctx, 500, 100, enemy.type, 4, false, 0, enemy.status);
+            drawCharacter(ctx, 500, 100, enemy.type, 4, false, 0, enemy.status, false, enemy.rotation, enemy.shakeX, enemy.yOffset);
 
             ctx.fillStyle = 'white';
             ctx.font = 'bold 24px Courier New';
@@ -1619,7 +1672,7 @@
                 const roster = [player, ...player.consultants];
                 roster.forEach((char, index) => {
                     let label = char.name;
-                    if (char === player) label = "Officer (You)";
+                    if (char === player) label = "Player (You)"; // Changed from Officer
                     label += ` HP:${char.hp}`;
                     
                     if (index === battleState.consultantSelection) {
