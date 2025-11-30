@@ -967,8 +967,8 @@
             const handler = (e) => {
                 e.preventDefault();
                 e.stopPropagation(); 
-                initAudio();
-                callback();
+                try { initAudio(); } catch(e) { console.error("Audio init failed", e); }
+                if (callback) callback();
             };
             btn.addEventListener('touchstart', handler, { passive: false });
             btn.addEventListener('click', handler);
@@ -982,10 +982,20 @@
         const quitBtn = document.getElementById('quit-btn');
         const toastMsg = document.getElementById('toast-msg');
         const restartBtn = document.getElementById('restart-btn');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const startScreen = document.getElementById('start-screen');
 
         bindButton(pauseBtn, togglePause);
         bindButton(resumeBtn, togglePause);
         bindButton(restartBtn, restartGame);
+        bindButton(startGameBtn, () => {
+            if (startScreen) startScreen.classList.add('hidden');
+            if (STORY_TEXTS && STORY_TEXTS.INTRO) {
+                showDialog(STORY_TEXTS.INTRO, () => {
+                    // Game starts
+                });
+            }
+        });
         
         function showToast(msg) {
             toastMsg.innerText = msg;
