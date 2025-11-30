@@ -247,14 +247,14 @@
             </div>
             <div class="ui-row">
                 <div class="ui-group">
-                    <div style="width: 40px;">Verstand</div>
+                    <div style="width: 80px;">Verstand</div>
                     <div class="bar-container"><div id="bar-hp" class="bar-fill hp-fill" style="width: 100%;"></div></div>
                 </div>
                 <span id="ui-signatures">UNT: 0/3</span>
             </div>
             <div class="ui-row" style="margin-top: 2px;">
                 <div class="ui-group">
-                    <div style="width: 40px;">XP</div>
+                    <div style="width: 80px;">XP</div>
                     <div class="bar-container"><div id="bar-xp" class="bar-fill xp-fill" style="width: 0%;"></div></div>
                 </div>
                 <span id="ui-donuts">🍩 x1</span>
@@ -1834,6 +1834,24 @@
             }
         }
 
+        function drawTextWrapped(ctx, text, x, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let line = '';
+            for(let n = 0; n < words.length; n++) {
+                const testLine = line + words[n] + ' ';
+                const metrics = ctx.measureText(testLine);
+                const testWidth = metrics.width;
+                if (testWidth > maxWidth && n > 0) {
+                    ctx.fillText(line, x, y);
+                    line = words[n] + ' ';
+                    y += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            }
+            ctx.fillText(line, x, y);
+        }
+
         function drawBattle() {
             const grad = ctx.createLinearGradient(0, 0, 0, SCREEN_HEIGHT);
             grad.addColorStop(0, '#2c3e50');
@@ -1851,7 +1869,7 @@
             drawCharacter(ctx, 500, 100, enemy.type, scale, false, 0, enemy.status, false, enemy.rotation, enemy.shakeX, enemy.yOffset);
 
             ctx.fillStyle = 'white';
-            ctx.font = 'bold 24px Courier New';
+            ctx.font = 'bold 20px Courier New';
             ctx.textAlign = 'left';
             ctx.fillText(`${enemy.name} (Lvl ${player.level})`, 450, 80);
             ctx.font = '16px Courier New';
@@ -1894,9 +1912,10 @@
 
             ctx.fillStyle = 'white';
             ctx.font = '24px Courier New';
-            ctx.fillText(battleState.log, 30, 400);
+            // Use helper to draw wrapped text on the left side (max width 400)
+            drawTextWrapped(ctx, battleState.log, 30, 400, 400, 30);
 
-            const startX = 500;
+            const startX = 450;
             const startY = 420;
 
             if (battleState.phase === 'MESSAGE') {
@@ -1904,7 +1923,7 @@
                  ctx.font = 'bold 20px Courier New';
                  ctx.fillText("[Drücke A um weiterzumachen]", 500, 560);
             } else if (battleState.phase === 'MENU') {
-                const options = ["KAMPF", "ITEM", "EINST", "WECHS", "FLUCHT"];
+                const options = ["KAMPF", "ITEM", "EINSTELLEN", "TEAM", "FLUCHT"];
                 options.forEach((opt, index) => {
                     if (index === battleState.menuSelection) {
                         ctx.fillStyle = '#f1c40f';
@@ -1912,13 +1931,17 @@
                     } else {
                         ctx.fillStyle = 'white';
                         if (opt === "FLUCHT" && battleState.enemy.isBoss) ctx.fillStyle = '#777';
-                        if (opt === "EINST" && battleState.enemy.isBoss) ctx.fillStyle = '#777';
+                        if (opt === "EINSTELLEN" && battleState.enemy.isBoss) ctx.fillStyle = '#777';
                         ctx.fillText(`  ${opt}`, startX, startY + index * 40);
                     }
                 });
             } else if (battleState.phase === 'ATTACK_SELECT') {
                 let moves = PLAYER_ATTACKS;
                 if (battleState.fighterIndex !== -1) moves = ENEMY_MOVES["Berater"];
+
+                // Reduce font for attacks if needed
+                ctx.font = '20px Courier New';
+
                 moves.forEach((att, index) => {
                     if (index === battleState.attackSelection) {
                          ctx.fillStyle = '#f1c40f';
