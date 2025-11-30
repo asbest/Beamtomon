@@ -249,6 +249,8 @@
             justify-content: flex-start;
             pointer-events: auto;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            cursor: pointer;
+            touch-action: manipulation;
         }
 
         .dialog-text {
@@ -650,6 +652,14 @@
 
         const dialogBox = document.getElementById('dialog-box');
         const dialogContent = document.getElementById('dialog-content');
+
+        // Allow advancing dialog by clicking/tapping the box itself
+        dialogBox.addEventListener('click', () => {
+            if (dialogState.active) {
+                playSound('action');
+                nextDialogLine();
+            }
+        });
 
         function showDialog(lines, callback) {
             dialogState.active = true;
