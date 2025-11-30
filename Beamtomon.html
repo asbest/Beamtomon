@@ -232,10 +232,73 @@
             text-align: center;
             font-weight: bold;
         }
+
+        #dialog-box {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            height: 120px;
+            background: #2c3e50;
+            border: 4px solid #fff;
+            border-radius: 5px;
+            padding: 15px;
+            z-index: 150;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            pointer-events: auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .dialog-text {
+            font-size: 18px;
+            line-height: 1.4;
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .dialog-prompt {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            color: #f1c40f;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #111;
+            z-index: 300;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        #start-title {
+            font-size: 40px;
+            color: #f1c40f;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px #c0392b;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <div id="game-container">
+        <div id="start-screen">
+            <div id="start-title">BEAMTOMON<br><span style="font-size:20px; color:#fff;">Stabile Boss Edition</span></div>
+            <button id="start-game-btn" class="menu-btn primary">Dienst antreten</button>
+        </div>
+
         <div id="ui-panel">
             <div class="ui-row" style="margin-bottom: 5px;">
                 <span id="ui-name">Praktikant (Lvl 1)</span>
@@ -265,6 +328,11 @@
             <canvas id="gameCanvas" width="800" height="600"></canvas>
             
             <div id="toast-msg">Spiel gespeichert!</div>
+
+            <div id="dialog-box" class="hidden">
+                <div id="dialog-content" class="dialog-text"></div>
+                <div class="dialog-prompt">▼</div>
+            </div>
 
             <div id="pause-modal" class="modal-overlay hidden">
                 <div class="modal-content">
@@ -531,6 +599,34 @@
             { name: "Kollege", dept: FACT_OFFICER, color: "#95a5a6", shirt: "#7f8c8d", pants: "#34495e", hp: 20, xp: 25 }
         ];
 
+        const STORY_TEXTS = {
+            INTRO: [
+                "Willkommen in der wunderbaren Welt der Bürokratie!",
+                "Mein Name ist Amtsrat Müller. Man nennt mich auch den 'Papier-Tiger'.",
+                "Diese Welt wird von Wesen bewohnt, die wir 'Beamte' nennen.",
+                "Für manche sind es Kollegen, für andere... Hindernisse auf dem Weg zum Feierabend.",
+                "Du bist ein junger Praktikant mit einem Traum: Die Verbeamtung auf Lebenszeit!",
+                "Aber Vorsicht! Der Weg ist gepflastert mit Anträgen, Cholerikern und leeren Kaffeekannen.",
+                "Sammle 3 Unterschriften (UNT), um den Boss der Ebene herauszufordern.",
+                "Viel Erfolg! (Du wirst es brauchen...)"
+            ],
+            BOSS_TAUNT_1: [
+                "ABTEILUNGSLEITER: 'WAS?! Sie wagen es, meine heilige Ruhe zu stören?'",
+                "ABTEILUNGSLEITER: 'Haben Sie überhaupt einen Termin? Nein?!'",
+                "ABTEILUNGSLEITER: 'Dann spüren Sie die Macht meiner sofortigen Ablehnung!'"
+            ],
+            BOSS_TAUNT_GENERIC: [
+                "BOSS: 'Zeit für eine ausserordentliche Leistungsbeurteilung!'",
+                "BOSS: 'Ihr Arbeitsvertrag endet... JETZT!'"
+            ],
+            PROMOTION: [
+                "Glückwunsch! Sie haben den Boss besiegt (oder er ist in Rente gegangen).",
+                "Sie wurden BEFÖRDERT!",
+                "Neue Ebene, neue Formulare, gleiches Gehalt.",
+                "Weiter an die Arbeit!"
+            ]
+        };
+
         let worldMap = [];
         let objectMap = [];
         let enemies = [];
@@ -540,6 +636,42 @@
             if (!battleState || battleState.fighterIndex === -1) return player;
             if (player.consultants[battleState.fighterIndex]) return player.consultants[battleState.fighterIndex];
             return player; // Fallback
+        }
+
+        let dialogState = {
+            active: false,
+            queue: [],
+            callback: null
+        };
+
+        const dialogBox = document.getElementById('dialog-box');
+        const dialogContent = document.getElementById('dialog-content');
+
+        function showDialog(lines, callback) {
+            dialogState.active = true;
+            dialogState.queue = [...lines]; // Copy
+            dialogState.callback = callback;
+            dialogBox.classList.remove('hidden');
+            nextDialogLine();
+        }
+
+        function nextDialogLine() {
+            if (dialogState.queue.length > 0) {
+                const line = dialogState.queue.shift();
+                dialogContent.innerText = line;
+            } else {
+                closeDialog();
+            }
+        }
+
+        function closeDialog() {
+            dialogState.active = false;
+            dialogBox.classList.add('hidden');
+            if (dialogState.callback) {
+                const cb = dialogState.callback;
+                dialogState.callback = null;
+                cb();
+            }
         }
 
         function updateHUD() {
@@ -727,6 +859,16 @@
         window.addEventListener('keydown', (e) => {
             initAudio();
             if (currentState === STATE_GAME_OVER) return;
+
+            if (dialogState.active) {
+                if (!keys[e.key] && (e.key === 'Enter' || e.key === ' ')) {
+                    keys[e.key] = true;
+                    playSound('action');
+                    nextDialogLine();
+                }
+                return;
+            }
+
             if (keys[e.key]) return;
             keys[e.key] = true;
             if (currentState === STATE_PAUSED) return; 
@@ -796,6 +938,14 @@
                  // Lock input briefly to prevent touch+click double firing
                  inputLock = true;
                  setTimeout(() => inputLock = false, 200);
+
+                 if (dialogState.active) {
+                     if (key === 'Enter' || key === ' ') {
+                         playSound('action');
+                         nextDialogLine();
+                     }
+                     return;
+                 }
 
                  if (currentState === STATE_GAME_OVER || currentState === STATE_PAUSED) return;
                  if (currentState === STATE_BATTLE) handleBattleInput(key);
@@ -1110,15 +1260,23 @@
                 xp: 200, isBoss: true, status: null, rotation: 0, shakeX: 0, yOffset: 0
             };
             playSound('boss');
-            startBattle(boss, -1); 
-            battleState.log = "BOSSKAMPF! Abteilungsleiter nähert sich!";
+
+            let taunt = STORY_TEXTS.BOSS_TAUNT_1;
+            if (currentStage > 1) taunt = STORY_TEXTS.BOSS_TAUNT_GENERIC;
+
+            showDialog(taunt, () => {
+                startBattle(boss, -1);
+                battleState.log = "BOSSKAMPF! Abteilungsleiter nähert sich!";
+            });
         }
 
         function nextStage() {
             currentStage++;
             playSound('victory');
-            floatingTexts.push({ text: "BEFÖRDERUNG!", x: SCREEN_WIDTH/2, y: SCREEN_HEIGHT/2, color: '#2ecc71', time: 3.0 });
-            initMap();
+            showDialog(STORY_TEXTS.PROMOTION, () => {
+                 floatingTexts.push({ text: "BEFÖRDERUNG!", x: SCREEN_WIDTH/2, y: SCREEN_HEIGHT/2, color: '#2ecc71', time: 3.0 });
+                 initMap();
+            });
         }
 
         function checkCollision(x, y) {
