@@ -479,10 +479,16 @@
         let exitDoorLoc = { x: 0, y: 0 };
         const TITLES = ["Praktikant", "Junior-Partner", "Senior-Partner", "Manager", "Direktor"];
         
-        const PLAYER_ATTACKS = [
+        const INITIAL_PLAYER_ATTACKS = [
             { name: "Antrag abgelehnt", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 },
-            { name: "Verantwortung abschieben", damage: 6, type: FACT_POLITICIAN },
-            { name: "Passierschein A38", damage: 8, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.3 }
+            { name: "Verantwortung abschieben", damage: 6, type: FACT_POLITICIAN }
+        ];
+
+        const LEARNABLE_ATTACKS = [
+            { name: "Akten-Staub", damage: 5, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.4, level: 3 },
+            { name: "Büroklammer-Regen", damage: 7, type: FACT_OFFICER, level: 5 },
+            { name: "Passierschein A38", damage: 8, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.5, level: 7 },
+            { name: "Vorschriften-Hammer", damage: 12, type: FACT_OFFICER, effect: "STUN", chance: 0.2, level: 10 }
         ];
 
         const ENEMY_MOVES = {
@@ -1537,16 +1543,17 @@
                     }
                 }
             } else if (battleState.phase === 'ATTACK_SELECT') {
-                if (key === 'ArrowUp') battleState.attackSelection = (battleState.attackSelection - 1 + 4) % 4;
-                if (key === 'ArrowDown') battleState.attackSelection = (battleState.attackSelection + 1) % 4;
+                const fighter = getActiveFighter();
+                const moves = fighter.attacks || INITIAL_PLAYER_ATTACKS;
+                const count = moves.length;
+
+                if (key === 'ArrowUp') battleState.attackSelection = (battleState.attackSelection - 1 + count) % count;
+                if (key === 'ArrowDown') battleState.attackSelection = (battleState.attackSelection + 1) % count;
                 if (key === 'Escape') {
                     battleState.phase = 'MENU';
                     battleState.log = "Was wirst du tun?";
                 }
-                let moves = PLAYER_ATTACKS;
-                if (battleState.fighterIndex !== -1) {
-                    moves = ENEMY_MOVES["Berater"];
-                }
+
                 if (key === 'Enter' || key === ' ') performAttack(moves[battleState.attackSelection]);
             } else if (battleState.phase === 'ITEM_SELECT') {
                 if (key === 'Escape') {
@@ -1643,7 +1650,8 @@
                     const newCon = {
                         name: "Berater", type: "Berater", dept: FACT_POLITICIAN,
                         level: battleState.enemy.level || 1, hp: battleState.enemy.hp, 
-                        maxHp: battleState.enemy.maxHp, xp: 0, nextLevelXp: 50, status: null
+                        maxHp: battleState.enemy.maxHp, xp: 0, nextLevelXp: 50, status: null,
+                        attacks: [...ENEMY_MOVES["Berater"]]
                     };
                     player.consultants.push(newCon);
                     playSound('victory');
@@ -1778,7 +1786,17 @@
             fighter.maxHp += 5;
             fighter.hp = fighter.maxHp;
             playSound('victory'); 
-            battleState.log = `${fighter.name} erreicht Level ${fighter.level}!`;
+
+            let newMoveMsg = "";
+            if (fighter === player) {
+                const newMoves = LEARNABLE_ATTACKS.filter(a => a.level === fighter.level);
+                newMoves.forEach(m => {
+                    fighter.attacks.push(m);
+                    newMoveMsg += ` Neue Attacke: ${m.name}!`;
+                });
+            }
+
+            battleState.log = `${fighter.name} erreicht Level ${fighter.level}!${newMoveMsg}`;
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
                 if (currentEnemyIndex > -1) enemies.splice(currentEnemyIndex, 1);
@@ -1800,6 +1818,7 @@
             player.consultants = [];
             player.status = null;
             player.inventory.donuts = 1;
+            player.attacks = [...INITIAL_PLAYER_ATTACKS];
             currentStage = 1;
 
             document.getElementById('game-over-modal').classList.add('hidden');
@@ -1936,8 +1955,8 @@
                     }
                 });
             } else if (battleState.phase === 'ATTACK_SELECT') {
-                let moves = PLAYER_ATTACKS;
-                if (battleState.fighterIndex !== -1) moves = ENEMY_MOVES["Berater"];
+                const fighter = getActiveFighter();
+                const moves = fighter.attacks || INITIAL_PLAYER_ATTACKS;
 
                 // Reduce font for attacks if needed
                 ctx.font = '20px Courier New';
