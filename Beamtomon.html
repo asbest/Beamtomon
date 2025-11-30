@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Beamtomon: Stable Boss Edition</title>
+    <title>Beamtomon: Stabile Boss Edition</title>
     <style>
         body {
             margin: 0;
@@ -238,19 +238,19 @@
     <div id="game-container">
         <div id="ui-panel">
             <div class="ui-row" style="margin-bottom: 5px;">
-                <span id="ui-name">Intern (Lvl 1)</span>
+                <span id="ui-name">Praktikant (Lvl 1)</span>
                 <div class="ui-group">
                     <button id="pause-btn">PAUSE</button>
-                    <span id="ui-score">0 Pts</span>
-                    <span id="ui-stage" style="color:#aaa;">Stg 1</span>
+                    <span id="ui-score">0 Pkt</span>
+                    <span id="ui-stage" style="color:#aaa;">Lvl 1</span>
                 </div>
             </div>
             <div class="ui-row">
                 <div class="ui-group">
-                    <div style="width: 40px;">Sanity</div>
+                    <div style="width: 40px;">Verstand</div>
                     <div class="bar-container"><div id="bar-hp" class="bar-fill hp-fill" style="width: 100%;"></div></div>
                 </div>
-                <span id="ui-signatures">SIGS: 0/3</span>
+                <span id="ui-signatures">UNT: 0/3</span>
             </div>
             <div class="ui-row" style="margin-top: 2px;">
                 <div class="ui-group">
@@ -264,23 +264,23 @@
         <div id="canvas-wrapper">
             <canvas id="gameCanvas" width="800" height="600"></canvas>
             
-            <div id="toast-msg">Game Saved!</div>
+            <div id="toast-msg">Spiel gespeichert!</div>
 
             <div id="pause-modal" class="modal-overlay hidden">
                 <div class="modal-content">
-                    <div class="modal-title" style="color: #e67e22;">PAUSED</div>
-                    <button id="resume-btn" class="menu-btn primary">Resume</button>
-                    <button id="save-btn" class="menu-btn">Save Game</button>
-                    <button id="load-btn" class="menu-btn">Load Game</button>
-                    <button id="quit-btn" class="menu-btn" style="background:#c0392b;">Reset</button>
+                    <div class="modal-title" style="color: #e67e22;">PAUSE</div>
+                    <button id="resume-btn" class="menu-btn primary">Weiter</button>
+                    <button id="save-btn" class="menu-btn">Speichern</button>
+                    <button id="load-btn" class="menu-btn">Laden</button>
+                    <button id="quit-btn" class="menu-btn" style="background:#c0392b;">Neustart</button>
                 </div>
             </div>
 
             <div id="game-over-modal" class="modal-overlay hidden">
                 <div class="modal-content">
                     <div class="modal-title">BURNOUT!</div>
-                    <div class="modal-score" id="final-score">Score: 0</div>
-                    <button id="restart-btn" class="menu-btn primary">Back to Work</button>
+                    <div class="modal-score" id="final-score">Punkte: 0</div>
+                    <button id="restart-btn" class="menu-btn primary">Zurück an die Arbeit</button>
                 </div>
             </div>
 
@@ -415,11 +415,19 @@
         const COLOR_MENU_BG = '#303030';
         const COLOR_MENU_BORDER = '#ffffff';
 
-        const FACT_OFFICER = 'OFFICER';     
-        const FACT_POLITICIAN = 'POLITICIAN'; 
-        const FACT_CITIZEN = 'CITIZEN';     
+        // Translate Factions (Displayed in UI)
+        const FACT_OFFICER = 'BEAMTER';
+        const FACT_POLITICIAN = 'POLITIKER';
+        const FACT_CITIZEN = 'BÜRGER';
         const FACT_NEUTRAL = 'NEUTRAL'; 
         const FACT_MANAGEMENT = 'MANAGEMENT';
+
+        // Log Helper
+        const EFFECT_NAMES = {
+            "STUN": "betäubt",
+            "CONFUSE": "verwirrt",
+            "NAUSEA": "übel"
+        };
 
         function getTypeEffectiveness(attackerType, defenderType) {
             if (attackerType === FACT_OFFICER && defenderType === FACT_CITIZEN) return 1.5;
@@ -460,7 +468,7 @@
 
         let player = {
             x: 100, y: 100, width: 30, height: 30, speed: 200,
-            color: '#3498db', type: "Beamter", name: "Player", dept: FACT_OFFICER, 
+            color: '#3498db', type: "Beamter", name: "Spieler", dept: FACT_OFFICER,
             level: 1, hp: 20, maxHp: 20, xp: 0, nextLevelXp: 50,
             score: 0, signatures: 0, inventory: { donuts: 1 },
             status: null, isWalking: false, facing: 'DOWN', consultants: []
@@ -469,52 +477,52 @@
         const SIGNATURES_NEEDED = 3;
         let coffeeMachineLoc = { x: 0, y: 0 };
         let exitDoorLoc = { x: 0, y: 0 };
-        const TITLES = ["Intern", "Junior Associate", "Senior Associate", "Manager", "Director"];
+        const TITLES = ["Praktikant", "Junior-Partner", "Senior-Partner", "Manager", "Direktor"];
         
         const PLAYER_ATTACKS = [
-            { name: "Permission Denied", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }, 
-            { name: "Pass the Buck", damage: 6, type: FACT_POLITICIAN },
-            { name: "Form A38", damage: 8, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.3 } 
+            { name: "Antrag abgelehnt", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 },
+            { name: "Verantwortung abschieben", damage: 6, type: FACT_POLITICIAN },
+            { name: "Passierschein A38", damage: 8, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.3 }
         ];
 
         const ENEMY_MOVES = {
-            "Consultant": [
-                { name: "Synergy Strike", damage: 5, type: FACT_POLITICIAN },
-                { name: "Mass Layoff", damage: 9, type: FACT_POLITICIAN },
-                { name: "Buzzword Blast", damage: 3, type: FACT_POLITICIAN, effect: "CONFUSE", chance: 0.5 },
-                { name: "Circle Back", damage: 4, type: FACT_OFFICER }
+            "Berater": [
+                { name: "Synergie-Schlag", damage: 5, type: FACT_POLITICIAN },
+                { name: "Massenentlassung", damage: 9, type: FACT_POLITICIAN },
+                { name: "Buzzword-Gewitter", damage: 3, type: FACT_POLITICIAN, effect: "CONFUSE", chance: 0.5 },
+                { name: "Nochmal aufgreifen", damage: 4, type: FACT_OFFICER }
             ],
-            "Politician": [
-                { name: "Empty Promise", damage: 2, type: FACT_POLITICIAN },
-                { name: "Tax Hike", damage: 7, type: FACT_OFFICER },
-                { name: "Filibuster", damage: 4, type: FACT_POLITICIAN, effect: "STUN", chance: 0.5 },
-                { name: "Scandal", damage: 8, type: FACT_POLITICIAN }
+            "Politiker": [
+                { name: "Leeres Versprechen", damage: 2, type: FACT_POLITICIAN },
+                { name: "Steuererhöhung", damage: 7, type: FACT_OFFICER },
+                { name: "Dauerrede", damage: 4, type: FACT_POLITICIAN, effect: "STUN", chance: 0.5 },
+                { name: "Skandal", damage: 8, type: FACT_POLITICIAN }
             ],
-            "Citizen": [
-                { name: "Complaint", damage: 3, type: FACT_CITIZEN },
-                { name: "Angry Email", damage: 4, type: FACT_CITIZEN },
-                { name: "Phone Call", damage: 2, type: FACT_CITIZEN },
-                { name: "Form Request", damage: 1, type: FACT_CITIZEN }
+            "Bürger": [
+                { name: "Beschwerde", damage: 3, type: FACT_CITIZEN },
+                { name: "Wütende E-Mail", damage: 4, type: FACT_CITIZEN },
+                { name: "Anruf", damage: 2, type: FACT_CITIZEN },
+                { name: "Formularanfrage", damage: 1, type: FACT_CITIZEN }
             ],
-            "Colleague": [
-                { name: "Reply All", damage: 5, type: FACT_OFFICER },
-                { name: "Gossip", damage: 3, type: FACT_NEUTRAL },
-                { name: "Microwave Fish", damage: 6, type: FACT_NEUTRAL, effect: "NAUSEA", chance: 1.0 }, 
-                { name: "Meeting Invite", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }
+            "Kollege": [
+                { name: "Allen antworten", damage: 5, type: FACT_OFFICER },
+                { name: "Klatsch", damage: 3, type: FACT_NEUTRAL },
+                { name: "Fisch in Mikrowelle", damage: 6, type: FACT_NEUTRAL, effect: "NAUSEA", chance: 1.0 },
+                { name: "Meeting-Einladung", damage: 4, type: FACT_OFFICER, effect: "STUN", chance: 0.3 }
             ],
-            "Middle Manager": [ 
-                { name: "Budget Cuts", damage: 8, type: FACT_MANAGEMENT },
-                { name: "Performance Review", damage: 12, type: FACT_MANAGEMENT },
-                { name: "Mandatory Overtime", damage: 6, type: FACT_MANAGEMENT, effect: "STUN", chance: 0.6 },
-                { name: "Micromanage", damage: 4, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.8 }
+            "Abteilungsleiter": [
+                { name: "Budgetkürzung", damage: 8, type: FACT_MANAGEMENT },
+                { name: "Mitarbeitergespräch", damage: 12, type: FACT_MANAGEMENT },
+                { name: "Pflichtüberstunden", damage: 6, type: FACT_MANAGEMENT, effect: "STUN", chance: 0.6 },
+                { name: "Mikromanagement", damage: 4, type: FACT_OFFICER, effect: "CONFUSE", chance: 0.8 }
             ]
         };
         
         const ENEMY_TYPES = [
-            { name: "Consultant", dept: FACT_POLITICIAN, color: "#f1c40f", shirt: "#f1c40f", pants: "#2c3e50", hp: 15, xp: 20 },
-            { name: "Politician", dept: FACT_POLITICIAN, color: "#9b59b6", shirt: "#8e44ad", pants: "#2c3e50", hp: 25, xp: 30 },
-            { name: "Citizen", dept: FACT_CITIZEN, color: "#2ecc71", shirt: "#27ae60", pants: "#ecf0f1", hp: 10, xp: 10 },
-            { name: "Colleague", dept: FACT_OFFICER, color: "#95a5a6", shirt: "#7f8c8d", pants: "#34495e", hp: 20, xp: 25 }
+            { name: "Berater", dept: FACT_POLITICIAN, color: "#f1c40f", shirt: "#f1c40f", pants: "#2c3e50", hp: 15, xp: 20 },
+            { name: "Politiker", dept: FACT_POLITICIAN, color: "#9b59b6", shirt: "#8e44ad", pants: "#2c3e50", hp: 25, xp: 30 },
+            { name: "Bürger", dept: FACT_CITIZEN, color: "#2ecc71", shirt: "#27ae60", pants: "#ecf0f1", hp: 10, xp: 10 },
+            { name: "Kollege", dept: FACT_OFFICER, color: "#95a5a6", shirt: "#7f8c8d", pants: "#34495e", hp: 20, xp: 25 }
         ];
 
         let worldMap = [];
@@ -539,11 +547,11 @@
             }
 
             document.getElementById('ui-name').innerText = nameDisplay;
-            document.getElementById('ui-score').innerText = `${player.score} Pts`;
-            document.getElementById('ui-stage').innerText = `Stg ${currentStage}`;
+            document.getElementById('ui-score').innerText = `${player.score} Pkt`;
+            document.getElementById('ui-stage').innerText = `Lvl ${currentStage}`;
             
             const sigs = document.getElementById('ui-signatures');
-            sigs.innerText = `SIGS: ${player.signatures}/${SIGNATURES_NEEDED}`;
+            sigs.innerText = `UNT: ${player.signatures}/${SIGNATURES_NEEDED}`;
             sigs.style.color = player.signatures >= SIGNATURES_NEEDED ? '#2ecc71' : '#e74c3c';
             document.getElementById('ui-donuts').innerText = `🍩 x${player.inventory.donuts}`;
             
@@ -689,9 +697,7 @@
                         const type = ENEMY_TYPES[Math.floor(prng() * ENEMY_TYPES.length)];
                         enemies.push({
                             ...type,
-                            type: type.name === "Consultant" ? "Consultant" : 
-                                  type.name === "Politician" ? "Politician" :
-                                  type.name === "Citizen" ? "Citizen" : "Colleague",
+                            type: type.name,
                             x: x, y: y,
                             maxHp: type.hp + currentStage * 2,
                             hp: type.hp + currentStage * 2,
@@ -840,10 +846,10 @@
                 
                 if (previousState === STATE_BATTLE) {
                     saveBtn.disabled = true;
-                    saveBtn.innerText = "Save (World Only)";
+                    saveBtn.innerText = "Speichern (Nur Welt)";
                 } else {
                     saveBtn.disabled = false;
-                    saveBtn.innerText = "Save Game";
+                    saveBtn.innerText = "Speichern";
                 }
             }
         }
@@ -858,13 +864,13 @@
                 mapSeedVal: mapSeedVal
             };
             localStorage.setItem('beamtomon_save', JSON.stringify(saveData));
-            showToast("Game Saved!");
+            showToast("Spiel gespeichert!");
         });
 
         bindButton(loadBtn, () => {
             const saveString = localStorage.getItem('beamtomon_save');
             if (!saveString) {
-                showToast("No Save Found!");
+                showToast("Kein Speicherstand!");
                 return;
             }
             try {
@@ -879,10 +885,10 @@
                 document.getElementById('ui-panel').style.display = 'flex';
                 pauseModal.classList.add('hidden');
                 updateHUD();
-                showToast("Game Loaded!");
+                showToast("Spiel geladen!");
             } catch (e) {
                 console.error("Load failed", e);
-                showToast("Save Data Corrupt!");
+                showToast("Daten defekt!");
             }
         });
 
@@ -983,7 +989,7 @@
                     player.status = null;
                     player.consultants.forEach(c => c.hp = c.maxHp);
                     playSound('heal');
-                    floatingTexts.push({ text: "Coffee Break! Team HP Maxed!", x: player.x, y: player.y - 30, color: '#f1c40f', time: 1.5 });
+                    floatingTexts.push({ text: "Kaffeepause! HP Voll!", x: player.x, y: player.y - 30, color: '#f1c40f', time: 1.5 });
                     updateHUD();
                     return;
                 }
@@ -1008,9 +1014,9 @@
                         playSound('action');
                         if (Math.random() < 0.5) {
                             player.inventory.donuts++;
-                            floatingTexts.push({ text: "Found Donut!", x: n.c*TILE_SIZE, y: n.r*TILE_SIZE, color: '#e67e22', time: 1.5 });
+                            floatingTexts.push({ text: "Donut gefunden!", x: n.c*TILE_SIZE, y: n.r*TILE_SIZE, color: '#e67e22', time: 1.5 });
                         } else {
-                            floatingTexts.push({ text: "Empty...", x: n.c*TILE_SIZE, y: n.r*TILE_SIZE, color: '#ccc', time: 1.0 });
+                            floatingTexts.push({ text: "Leer...", x: n.c*TILE_SIZE, y: n.r*TILE_SIZE, color: '#ccc', time: 1.0 });
                         }
                         looted = true;
                         updateHUD();
@@ -1068,7 +1074,7 @@
                         return; 
                     } else {
                         nearbyInteraction = "LOCKED";
-                        floatingTexts.push({ text: `Locked!`, x: player.x, y: player.y - 30, color: '#e74c3c', time: 0.1 });
+                        floatingTexts.push({ text: `Verschlossen!`, x: player.x, y: player.y - 30, color: '#e74c3c', time: 0.1 });
                         return; 
                     }
                 }
@@ -1093,19 +1099,19 @@
 
         function triggerBossBattle() {
             const boss = {
-                name: "Middle Manager", type: "Middle Manager", dept: FACT_MANAGEMENT,
+                name: "Abteilungsleiter", type: "Abteilungsleiter", dept: FACT_MANAGEMENT,
                 level: player.level + 2, hp: 100 + (currentStage * 20), maxHp: 100 + (currentStage * 20),
                 xp: 200, isBoss: true, status: null, rotation: 0, shakeX: 0, yOffset: 0
             };
             playSound('boss');
             startBattle(boss, -1); 
-            battleState.log = "BOSS FIGHT! Middle Manager approaches!";
+            battleState.log = "BOSSKAMPF! Abteilungsleiter nähert sich!";
         }
 
         function nextStage() {
             currentStage++;
             playSound('victory');
-            floatingTexts.push({ text: "PROMOTION!", x: SCREEN_WIDTH/2, y: SCREEN_HEIGHT/2, color: '#2ecc71', time: 3.0 });
+            floatingTexts.push({ text: "BEFÖRDERUNG!", x: SCREEN_WIDTH/2, y: SCREEN_HEIGHT/2, color: '#2ecc71', time: 3.0 });
             initMap();
         }
 
@@ -1154,15 +1160,15 @@
             let hasTie = true;
             let hasGlasses = true;
 
-            if (type === "Consultant") {
+            if (type === "Berater") {
                 shirtColor = '#f1c40f'; pantsColor = '#34495e'; hairColor = '#f39c12'; hasGlasses = false;
-            } else if (type === "Politician") {
+            } else if (type === "Politiker") {
                 shirtColor = '#8e44ad'; pantsColor = '#2c3e50'; hairColor = '#bdc3c7'; hasTie = true;
-            } else if (type === "Citizen") {
+            } else if (type === "Bürger") {
                 shirtColor = '#2ecc71'; pantsColor = '#95a5a6'; hasTie = false; hasGlasses = false;
-            } else if (type === "Colleague") {
+            } else if (type === "Kollege") {
                 shirtColor = '#95a5a6'; pantsColor = '#34495e';
-            } else if (type === "Middle Manager") {
+            } else if (type === "Abteilungsleiter") {
                 shirtColor = '#c0392b'; pantsColor = '#000'; hairColor = '#444'; hasTie = true;
             }
 
@@ -1404,7 +1410,7 @@
                 ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
                 ctx.font = 'bold 20px Courier New';
                 ctx.textAlign = 'left';
-                ctx.fillText("SAFE!", player.x - 10, player.y - 10);
+                ctx.fillText("SICHER!", player.x - 10, player.y - 10);
             }
         }
 
@@ -1423,7 +1429,7 @@
                 consultantSelection: 0, 
                 fighterIndex: -1, 
                 phase: 'MENU',
-                log: `You encountered a ${enemy.name}!`,
+                log: `Ein wilder ${enemy.name} erscheint!`,
                 turn: 'PLAYER',
                 animTimer: 0, 
                 onAck: null,
@@ -1443,9 +1449,9 @@
                     fighter.hp = Math.min(fighter.maxHp, fighter.hp + 10);
                     fighter.status = null;
                     playSound('heal');
-                    battleState.log = `Ate Donut! +10 Sanity.`;
+                    battleState.log = `Donut gegessen! +10 Verstand.`;
                 } else {
-                    battleState.log = "No Donuts left!";
+                    battleState.log = "Keine Donuts mehr!";
                     battleState.phase = 'MESSAGE';
                     battleState.onAck = () => { battleState.phase = 'ITEM_SELECT'; };
                     return; 
@@ -1475,7 +1481,7 @@
                 const fighter = getActiveFighter();
                 if (fighter.status && fighter.status.type === 'STUN') {
                     if (key === 'Enter' || key === ' ') {
-                        battleState.log = "You are Stunned! Turn skipped.";
+                        battleState.log = "Du bist betäubt! Runde ausgesetzt.";
                         fighter.status = null;
                         battleState.phase = 'MESSAGE';
                         battleState.onAck = () => enemyTurn();
@@ -1489,33 +1495,33 @@
                     if (battleState.menuSelection === 0) { // FIGHT
                         battleState.phase = 'ATTACK_SELECT';
                         battleState.attackSelection = 0;
-                        battleState.log = "Select Action:";
+                        battleState.log = "Wähle Aktion:";
                     } else if (battleState.menuSelection === 1) { // ITEM
                         battleState.phase = 'ITEM_SELECT';
                         battleState.itemSelection = 0;
-                        battleState.log = "Select Item:";
+                        battleState.log = "Wähle Item:";
                     } else if (battleState.menuSelection === 2) { // HIRE
                         attemptCatch();
                     } else if (battleState.menuSelection === 3) { // SWITCH
                         if (player.consultants.length > 0) {
                             battleState.phase = 'SWITCH_SELECT';
                             battleState.consultantSelection = 0;
-                            battleState.log = "Select Consultant:";
+                            battleState.log = "Wähle Berater:";
                         } else {
-                            battleState.log = "No consultants hired!";
+                            battleState.log = "Keine Berater eingestellt!";
                             battleState.phase = 'MESSAGE';
-                            battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
+                            battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Aktion?"; };
                         }
                     } else if (battleState.menuSelection === 4) { // RUN
                         if (battleState.enemy.isBoss) {
-                            battleState.log = "Can't run from Boss!";
+                            battleState.log = "Flucht vor Boss unmöglich!";
                             battleState.phase = 'MESSAGE';
-                            battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
+                            battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Aktion?"; };
                             return;
                         }
 
                         if (Math.random() < 0.5) {
-                            battleState.log = "Ran away safely!";
+                            battleState.log = "Erfolgreich geflohen!";
                             battleCooldown = 2.0;
                             battleState.phase = 'MESSAGE';
                             battleState.onAck = () => { 
@@ -1524,7 +1530,7 @@
                                 updateHUD(); 
                             };
                         } else {
-                            battleState.log = "Failed to run!";
+                            battleState.log = "Flucht gescheitert!";
                             battleState.phase = 'MESSAGE';
                             battleState.onAck = () => enemyTurn();
                         }
@@ -1535,17 +1541,17 @@
                 if (key === 'ArrowDown') battleState.attackSelection = (battleState.attackSelection + 1) % 4;
                 if (key === 'Escape') {
                     battleState.phase = 'MENU';
-                    battleState.log = "What will you do?";
+                    battleState.log = "Was wirst du tun?";
                 }
                 let moves = PLAYER_ATTACKS;
                 if (battleState.fighterIndex !== -1) {
-                    moves = ENEMY_MOVES["Consultant"]; 
+                    moves = ENEMY_MOVES["Berater"];
                 }
                 if (key === 'Enter' || key === ' ') performAttack(moves[battleState.attackSelection]);
             } else if (battleState.phase === 'ITEM_SELECT') {
                 if (key === 'Escape') {
                     battleState.phase = 'MENU';
-                    battleState.log = "Action?";
+                    battleState.log = "Aktion?";
                 }
                 if (key === 'Enter' || key === ' ') {
                     useItem("Donut");
@@ -1556,27 +1562,27 @@
                 if (key === 'ArrowDown') battleState.consultantSelection = (battleState.consultantSelection + 1) % count;
                 if (key === 'Escape') {
                     battleState.phase = 'MENU';
-                    battleState.log = "Action?";
+                    battleState.log = "Aktion?";
                 }
                 if (key === 'Enter' || key === ' ') {
                     if (battleState.consultantSelection === count - 1) {
                         battleState.phase = 'MENU';
-                        battleState.log = "Action?";
+                        battleState.log = "Aktion?";
                         return;
                     }
                     let targetIndex = battleState.consultantSelection - 1; 
                     let targetFighter = (targetIndex === -1) ? player : player.consultants[targetIndex];
                     if (targetFighter.hp <= 0) {
-                        battleState.log = `${targetFighter.name} is exhausted!`;
+                        battleState.log = `${targetFighter.name} ist erschöpft!`;
                         battleState.phase = 'MESSAGE';
                         battleState.onAck = () => { battleState.phase = 'SWITCH_SELECT'; };
                     } else if (targetIndex === battleState.fighterIndex) {
-                         battleState.log = "Already selected!";
+                         battleState.log = "Bereits ausgewählt!";
                          battleState.phase = 'MESSAGE';
                          battleState.onAck = () => { battleState.phase = 'SWITCH_SELECT'; };
                     } else {
                         battleState.fighterIndex = targetIndex;
-                        battleState.log = `Go, ${targetFighter.name}!`;
+                        battleState.log = `Los, ${targetFighter.name}!`;
                         battleState.phase = 'MESSAGE';
                         battleState.onAck = () => enemyTurn();
                     }
@@ -1598,10 +1604,10 @@
 
             if (attack.effect && Math.random() < attack.chance) {
                 battleState.enemy.status = { type: attack.effect };
-                battleState.log = `Used ${attack.name}! Enemy ${attack.effect}!`;
+                battleState.log = `${attack.name} eingesetzt! Gegner ${EFFECT_NAMES[attack.effect]}!`;
             } else {
-                let effText = multiplier > 1 ? "Super Effective!" : (multiplier < 1 ? "Not Effective..." : "");
-                battleState.log = `Used ${attack.name}! ${damage} dmg. ${effText}`;
+                let effText = multiplier > 1 ? "Sehr effektiv!" : (multiplier < 1 ? "Nicht effektiv..." : "");
+                battleState.log = `${attack.name} eingesetzt! ${damage} Schaden. ${effText}`;
             }
             
             battleState.enemy.hp -= damage;
@@ -1621,27 +1627,27 @@
 
         function attemptCatch() {
             if (player.consultants.length >= 3) {
-                battleState.log = "Team full (Max 3)!";
+                battleState.log = "Team voll (Max 3)!";
                 battleState.phase = 'MESSAGE';
-                battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
+                battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Aktion?"; };
                 return;
             }
             if (battleState.enemy.isBoss) {
-                battleState.log = "Bosses won't work for you!";
+                battleState.log = "Bosse arbeiten nicht für dich!";
                 battleState.phase = 'MESSAGE';
-                battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
+                battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Aktion?"; };
                 return;
             }
-            if (battleState.enemy.type === "Consultant") {
+            if (battleState.enemy.type === "Berater") {
                 if (Math.random() < 0.6) {
                     const newCon = {
-                        name: "Consultant", type: "Consultant", dept: FACT_POLITICIAN, 
+                        name: "Berater", type: "Berater", dept: FACT_POLITICIAN,
                         level: battleState.enemy.level || 1, hp: battleState.enemy.hp, 
                         maxHp: battleState.enemy.maxHp, xp: 0, nextLevelXp: 50, status: null
                     };
                     player.consultants.push(newCon);
                     playSound('victory');
-                    battleState.log = "Hired Consultant!";
+                    battleState.log = "Berater eingestellt!";
                     battleState.phase = 'MESSAGE';
                     battleState.onAck = () => { 
                         currentState = STATE_WORLD; 
@@ -1650,14 +1656,14 @@
                         updateHUD(); 
                     };
                 } else {
-                    battleState.log = "Offer refused!";
+                    battleState.log = "Angebot abgelehnt!";
                     battleState.phase = 'MESSAGE';
                     battleState.onAck = () => enemyTurn();
                 }
             } else {
-                battleState.log = "Can only hire Consultants!";
+                battleState.log = "Nur Berater einstellbar!";
                 battleState.phase = 'MESSAGE';
-                battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
+                battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Aktion?"; };
             }
         }
 
@@ -1667,15 +1673,15 @@
 
             if (battleState.enemy.status) {
                 if (battleState.enemy.status.type === 'STUN') {
-                    battleState.log = "Enemy is Stunned!";
+                    battleState.log = "Gegner ist betäubt!";
                     battleState.enemy.status = null;
                     battleState.phase = 'MESSAGE';
-                    battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Action?"; };
+                    battleState.onAck = () => { battleState.phase = 'MENU'; battleState.log = "Aktion?"; };
                     return;
                 }
                 if (battleState.enemy.status.type === 'CONFUSE') {
                     if (Math.random() < 0.5) {
-                        battleState.log = "Enemy Confused! Hurts itself!";
+                        battleState.log = "Gegner verwirrt! Verletzt sich selbst!";
                         playSound('hit');
                         battleState.enemy.hp -= 3;
                         battleState.phase = 'MESSAGE';
@@ -1685,14 +1691,14 @@
                                  battleState.phase = 'DEFEAT_ANIMATION';
                                  battleState.animTimer = 0;
                             }
-                            else { battleState.phase = 'MENU'; battleState.log = "Action?"; }
+                            else { battleState.phase = 'MENU'; battleState.log = "Aktion?"; }
                         };
                         return;
                     }
                 }
             }
 
-            const moves = ENEMY_MOVES[battleState.enemy.type] || ENEMY_MOVES["Consultant"];
+            const moves = ENEMY_MOVES[battleState.enemy.type] || ENEMY_MOVES["Berater"];
             const move = moves[Math.floor(Math.random() * moves.length)];
             
             const levelScale = 1 + (player.level * 0.1);
@@ -1703,10 +1709,10 @@
 
             if (move.effect && Math.random() < move.chance) {
                 fighter.status = { type: move.effect };
-                battleState.log = `${battleState.enemy.name} used ${move.name}! ${fighter.name} ${move.effect}!`;
+                battleState.log = `${battleState.enemy.name} nutzt ${move.name}! ${fighter.name} ${EFFECT_NAMES[move.effect]}!`;
             } else {
-                let effText = multiplier > 1 ? " (Ouch!)" : (multiplier < 1 ? " (Resisted)" : "");
-                battleState.log = `${battleState.enemy.name} used ${move.name}! -${damage} Sanity${effText}`;
+                let effText = multiplier > 1 ? " (Aua!)" : (multiplier < 1 ? " (Resistiert)" : "");
+                battleState.log = `${battleState.enemy.name} nutzt ${move.name}! -${damage} Verstand${effText}`;
             }
 
             playSound('hit');
@@ -1720,17 +1726,17 @@
                     if (fighter === player) {
                         playSound('defeat');
                         currentState = STATE_GAME_OVER;
-                        document.getElementById('final-score').innerText = `Score: ${player.score}`;
+                        document.getElementById('final-score').innerText = `Punkte: ${player.score}`;
                         document.getElementById('game-over-modal').classList.remove('hidden');
                     } else {
-                        battleState.log = `${fighter.name} retreated!`;
+                        battleState.log = `${fighter.name} hat sich zurückgezogen!`;
                         battleState.fighterIndex = -1; 
                         battleState.phase = 'MESSAGE';
                         battleState.onAck = () => { battleState.phase = 'MENU'; };
                     }
                 } else {
                     battleState.phase = 'MENU';
-                    battleState.log = "Action?";
+                    battleState.log = "Aktion?";
                 }
             };
         }
@@ -1745,11 +1751,11 @@
             let sigText = "";
             if (Math.random() < 0.5) {
                 player.signatures++;
-                sigText = " Found Signature!";
+                sigText = " Unterschrift gefunden!";
             }
 
             playSound('victory');
-            battleState.log = `Win! +${xpGain} XP for ${fighter.name}. +${scoreGain} Pts.${sigText}`;
+            battleState.log = `Sieg! +${xpGain} XP für ${fighter.name}. +${scoreGain} Pkte.${sigText}`;
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
                 if (fighter.xp >= fighter.nextLevelXp) levelUp();
@@ -1772,7 +1778,7 @@
             fighter.maxHp += 5;
             fighter.hp = fighter.maxHp;
             playSound('victory'); 
-            battleState.log = `${fighter.name} leveled up to ${fighter.level}!`;
+            battleState.log = `${fighter.name} erreicht Level ${fighter.level}!`;
             battleState.phase = 'MESSAGE';
             battleState.onAck = () => {
                 if (currentEnemyIndex > -1) enemies.splice(currentEnemyIndex, 1);
@@ -1850,7 +1856,7 @@
             ctx.fillText(`${enemy.name} (Lvl ${player.level})`, 450, 80);
             ctx.font = '16px Courier New';
             ctx.fillStyle = '#aaa';
-            ctx.fillText(`Faction: ${enemy.dept}`, 450, 100); 
+            ctx.fillText(`Fraktion: ${enemy.dept}`, 450, 100);
             
             ctx.fillStyle = '#555';
             drawRoundedRect(ctx, 450, 110, 200, 15, 5);
@@ -1867,7 +1873,7 @@
             ctx.fillText(`${fighter.name}`, 100, 230);
             ctx.font = '16px Courier New';
             ctx.fillStyle = '#aaa';
-            ctx.fillText(`Faction: ${fighter.dept || FACT_OFFICER}`, 100, 250); 
+            ctx.fillText(`Fraktion: ${fighter.dept || FACT_OFFICER}`, 100, 250);
             
             ctx.fillStyle = '#555';
             drawRoundedRect(ctx, 100, 260, 200, 15, 5);
@@ -1896,23 +1902,23 @@
             if (battleState.phase === 'MESSAGE') {
                  ctx.fillStyle = '#f1c40f'; 
                  ctx.font = 'bold 20px Courier New';
-                 ctx.fillText("[Press A to continue]", 500, 560);
+                 ctx.fillText("[Drücke A um weiterzumachen]", 500, 560);
             } else if (battleState.phase === 'MENU') {
-                const options = ["FIGHT", "ITEM", "HIRE", "SWITCH", "RUN"];
+                const options = ["KAMPF", "ITEM", "EINST", "WECHS", "FLUCHT"];
                 options.forEach((opt, index) => {
                     if (index === battleState.menuSelection) {
                         ctx.fillStyle = '#f1c40f';
                         ctx.fillText(`> ${opt}`, startX, startY + index * 40);
                     } else {
                         ctx.fillStyle = 'white';
-                        if (opt === "RUN" && battleState.enemy.isBoss) ctx.fillStyle = '#777';
-                        if (opt === "HIRE" && battleState.enemy.isBoss) ctx.fillStyle = '#777';
+                        if (opt === "FLUCHT" && battleState.enemy.isBoss) ctx.fillStyle = '#777';
+                        if (opt === "EINST" && battleState.enemy.isBoss) ctx.fillStyle = '#777';
                         ctx.fillText(`  ${opt}`, startX, startY + index * 40);
                     }
                 });
             } else if (battleState.phase === 'ATTACK_SELECT') {
                 let moves = PLAYER_ATTACKS;
-                if (battleState.fighterIndex !== -1) moves = ENEMY_MOVES["Consultant"]; 
+                if (battleState.fighterIndex !== -1) moves = ENEMY_MOVES["Berater"];
                 moves.forEach((att, index) => {
                     if (index === battleState.attackSelection) {
                          ctx.fillStyle = '#f1c40f';
@@ -1923,7 +1929,7 @@
                     }
                 });
             } else if (battleState.phase === 'ITEM_SELECT') {
-                let label = `Eat Donut (${player.inventory.donuts})`;
+                let label = `Donut essen (${player.inventory.donuts})`;
                 if (battleState.itemSelection === 0) {
                     ctx.fillStyle = '#f1c40f';
                     ctx.fillText(`> ${label}`, startX, startY);
@@ -1935,7 +1941,7 @@
                 const roster = [player, ...player.consultants];
                 roster.forEach((char, index) => {
                     let label = char.name;
-                    if (char === player) label = "Player (You)"; 
+                    if (char === player) label = "Spieler (Du)";
                     label += ` HP:${char.hp}`;
                     if (index === battleState.consultantSelection) {
                          ctx.fillStyle = '#f1c40f';
@@ -1948,10 +1954,10 @@
                 const backIndex = roster.length;
                 if (battleState.consultantSelection === backIndex) {
                     ctx.fillStyle = '#f1c40f';
-                    ctx.fillText(`> Back`, startX, startY + backIndex * 30 - 20);
+                    ctx.fillText(`> Zurück`, startX, startY + backIndex * 30 - 20);
                 } else {
                     ctx.fillStyle = 'white';
-                    ctx.fillText(`  Back`, startX, startY + backIndex * 30 - 20);
+                    ctx.fillText(`  Zurück`, startX, startY + backIndex * 30 - 20);
                 }
             }
         }
@@ -1960,4 +1966,3 @@
     </script>
 </body>
 </html>
-
